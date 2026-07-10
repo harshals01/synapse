@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 _MAX_CHARS_PER_CHUNK = 2000
 
 
-# ── Internal helpers ──────────────────────────────────────────────────────────
+# ── Internal helpers ───────────────────────────────────────────────────────────
 
 def _build_headers() -> dict:
     headers: dict = {"Content-Type": "application/json"}
@@ -27,14 +27,18 @@ def _handle_non_200(response: requests.Response, attempt: int) -> None:
     """
     if response.status_code == 429:
         wait = int(response.headers.get("Retry-After", 2 ** attempt))
-        logger.warning(f"HF API rate limited (429). Retrying in {wait}s (attempt {attempt + 1}).")
+        logger.warning(
+            f"HF API rate limited (429). Retrying in {wait}s (attempt {attempt + 1})."
+        )
         time.sleep(wait)
         return
 
     if response.status_code == 503:
         estimated = response.json().get("estimated_time", 20)
         wait = min(float(estimated), 30.0)
-        logger.warning(f"HF model loading (503). Waiting {wait:.0f}s (attempt {attempt + 1}).")
+        logger.warning(
+            f"HF model loading (503). Waiting {wait:.0f}s (attempt {attempt + 1})."
+        )
         time.sleep(wait)
         return
 
@@ -52,7 +56,24 @@ def _parse_single_embedding(data: object) -> list[float]:
     raise ValueError(f"Unexpected embedding response format: {type(data)}")
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+def _embed_with_partition(texts: list[str]) -> list[list[float]]:
+    """
+    Recursively partition the text list into halves when a batch request
+    fails with HTTP 413 (payload too large) or timeout exhaustion.
+
+    This avoids the O(N) serial call penalty by making O(log N) smaller
+    batch requests until a batch size is found that the API accepts.
+    Individual chunks that still fail are handled by ``get_embedding``.
+    """
+    if len(texts) == 1:
+        return [get_embedding(texts[0])]
+    mid = len(texts) // 2
+    left = _embed_with_partition(texts[:mid])
+    right = _embed_with_partition(texts[mid:])
+    return left + right
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
 
 def get_embedding(text: str) -> list[float]:
     """
@@ -99,9 +120,10 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     """
     Embed a list of text chunks in a single HF API call.
 
-    Each chunk is truncated to 2000 characters before sending. Falls back
-    automatically to serial embedding if the server returns HTTP 413
-    (payload too large) or if all batch retries are exhausted.
+    Each chunk is truncated to 2000 characters before sending.
+    On HTTP 413 (payload too large) or timeout exhaustion, falls back to
+    ``_embed_with_partition`` which recursively halves the batch to find
+    an acceptable size — avoiding the O(N) serial-call penalty.
     """
     truncated = [
         t[:_MAX_CHARS_PER_CHUNK] if len(t) > _MAX_CHARS_PER_CHUNK else t
@@ -120,8 +142,10 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
         except requests.exceptions.Timeout:
             logger.warning("HF batch API timeout (attempt %d).", attempt + 1)
             if attempt == config.MAX_EMBED_RETRIES - 1:
-                logger.warning("Falling back to serial embedding after timeout.")
-                return [get_embedding(t) for t in texts]
+                logger.warning(
+                    "Falling back to partitioned sub-batches after timeout exhaustion."
+                )
+                return _embed_with_partition(texts)
             time.sleep(2 ** attempt)
             continue
 
@@ -129,10 +153,15 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
             return response.json()
 
         if response.status_code == 413:
-            logger.warning("Batch payload too large (413). Falling back to serial embedding.")
-            return [get_embedding(t) for t in texts]
+            logger.warning(
+                "Batch payload too large (413). Splitting into partitioned sub-batches."
+            )
+            return _embed_with_partition(texts)
 
         _handle_non_200(response, attempt)
 
-    logger.warning("Batch embedding failed after %d retries. Falling back to serial.", config.MAX_EMBED_RETRIES)
-    return [get_embedding(t) for t in texts]
+    logger.warning(
+        "Batch embedding failed after %d retries. Splitting into partitioned sub-batches.",
+        config.MAX_EMBED_RETRIES,
+    )
+    return _embed_with_partition(texts)

@@ -1,36 +1,39 @@
-from fastapi import APIRouter
-from app.models.request_models import ChatRequest
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth import require_api_key
+from app.config import LOW_CONFIDENCE_THRESHOLD, MAX_CONTEXT_DOCS
 from app.logger import get_logger
-from app.services.search_service import run_search
+from app.models.request_models import ChatRequest
 from app.services.fusion_service import rrf_fusion
 from app.services.llm_service import call_llm
+from app.services.search_service import run_search
 from app.utils.query_utils import rewrite_query_with_context
-from app.config import LOW_CONFIDENCE_THRESHOLD, MAX_CONTEXT_DOCS
 
 router = APIRouter()
 logger = get_logger()
 
 
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(require_api_key)])
 def chat(req: ChatRequest):
     try:
-        if not req.messages:
-            return {"error": "No messages provided"}
-
-        messages = req.messages
+        # Convert Pydantic models to plain dicts for downstream service functions
+        messages = [m.model_dump() for m in req.messages]
 
         raw_query = next(
             (m["content"] for m in reversed(messages) if m["role"] == "user"),
-            ""
+            "",
         )
-        logger.info(f"Raw Query: {raw_query}")
+        # Log query length only — avoid writing user PII to disk
+        logger.info(f"Query received ({len(raw_query)} chars)")
 
         user_query = rewrite_query_with_context(messages, logger)
         user_query_cleaned = user_query.lower().strip()
         logger.info(f"Final Query: {user_query_cleaned}")
 
         vector_hits, keyword_hits = run_search(user_query_cleaned, req.top_k, logger)
-        logger.info(f"Retrieved {len(vector_hits)} vector hits and {len(keyword_hits)} keyword hits.")
+        logger.info(
+            f"Retrieved {len(vector_hits)} vector hits and {len(keyword_hits)} keyword hits."
+        )
 
         sorted_hits = rrf_fusion(vector_hits, keyword_hits)
 
@@ -42,15 +45,15 @@ def chat(req: ChatRequest):
 
         top_hits = sorted_hits[:MAX_CONTEXT_DOCS]
 
-        # P4: Use .get() for null-safety; skip docs missing 'combined' payload
+        # Null-safe payload access — skip documents missing the 'combined' field
         context_blocks = [
             f"Document {i + 1}:\n{hit['source'].get('combined', '').replace('<br>', chr(10))}"
             for i, hit in enumerate(top_hits)
-            if hit.get('source', {}).get('combined')
+            if hit.get("source", {}).get("combined")
         ]
         retrieved_context = "\n\n".join(context_blocks)
 
-        # P4 / P2: Exclude any empty stubs (e.g. unfilled bot placeholders)
+        # Build chat history, excluding any empty message stubs
         chat_history = [
             {"role": m["role"], "content": m["content"]}
             for m in messages[-4:-1]
@@ -60,9 +63,13 @@ def chat(req: ChatRequest):
 
         payload = {
             "messages": [
-                {"role": "system", "content": "Answer using only the provided context. Do not hallucinate."},
+                {
+                    "role": "system",
+                    "content": "Answer using only the provided context. Do not hallucinate.",
+                },
                 {"role": "system", "content": f"Context:\n{retrieved_context}"},
-            ] + chat_history
+            ]
+            + chat_history
         }
 
         reply = call_llm(payload, logger)
@@ -74,7 +81,12 @@ def chat(req: ChatRequest):
             "max_score": max_score,
         }
 
-    except Exception as e:
-        logger.error(str(e))
-        return {"error": str(e)}
+    except HTTPException:
+        raise  # Re-raise FastAPI HTTP exceptions without wrapping
 
+    except Exception:
+        logger.exception("Unhandled exception in POST /chat")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred while processing your request.",
+        )

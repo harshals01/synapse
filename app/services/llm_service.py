@@ -1,12 +1,28 @@
+"""
+LLM service — Hugging Face OpenAI-compatible chat completions router.
+
+The application uses the Hugging Face serverless inference router exclusively.
+Model is configured via the HF_LLM_MODEL environment variable.
+"""
 import time
+
 import requests
+
 from app import config
 
+_HF_LLM_URL = "https://router.huggingface.co/v1/chat/completions"
 
-def _call_with_retry(url: str, headers: dict, payload: dict, logger, max_retries: int = 3) -> requests.Response:
+
+def _call_with_retry(
+    url: str,
+    headers: dict,
+    payload: dict,
+    logger,
+    max_retries: int = 3,
+) -> requests.Response:
     """
-    POST to `url` with exponential backoff on HTTP 429 (rate limit) and
-    503 (model loading). Raises RuntimeError after all retries are exhausted.
+    POST to ``url`` with exponential backoff on HTTP 429 (rate limit) and
+    503 (model loading). Raises ``RuntimeError`` after all retries are exhausted.
     """
     for attempt in range(max_retries):
         try:
@@ -23,91 +39,65 @@ def _call_with_retry(url: str, headers: dict, payload: dict, logger, max_retries
 
         if response.status_code == 429:
             wait = int(response.headers.get("Retry-After", 2 ** attempt))
-            logger.warning(f"LLM API rate limited (429). Retrying in {wait}s (attempt {attempt + 1}).")
+            logger.warning(
+                f"LLM API rate limited (429). Retrying in {wait}s "
+                f"(attempt {attempt + 1}/{max_retries})."
+            )
             time.sleep(wait)
             continue
 
         if response.status_code == 503:
-            estimated = response.json().get("estimated_time", 20) if response.content else 20
-            wait = min(float(estimated), 30.0)
-            logger.warning(f"LLM model loading (503). Waiting {wait:.0f}s (attempt {attempt + 1}).")
+            body = response.json() if response.content else {}
+            wait = min(float(body.get("estimated_time", 20)), 30.0)
+            logger.warning(
+                f"LLM model loading (503). Waiting {wait:.0f}s "
+                f"(attempt {attempt + 1}/{max_retries})."
+            )
             time.sleep(wait)
             continue
 
-        # Non-retryable error — return immediately so caller can log and handle
+        # Non-retryable error — return immediately so the caller can log it
         return response
 
     raise RuntimeError(f"LLM API failed after {max_retries} retries.")
 
 
-def call_llm(payload, logger):
+def call_llm(payload: dict, logger) -> str:
+    """
+    Send a chat completion request to the Hugging Face OpenAI-compatible
+    router and return the generated reply string.
+
+    Retries automatically on HTTP 429 (rate limit) and 503 (model cold-start).
+    Returns a human-readable error string on persistent failure so the caller
+    can surface it to the user gracefully.
+    """
     try:
-        if config.LLM_PROVIDER == "gemini" and config.GEMINI_API_KEY:
-            url = f"{config.LLM_URL}?key={config.GEMINI_API_KEY}"
+        headers: dict = {"Content-Type": "application/json"}
+        if config.HF_TOKEN:
+            headers["Authorization"] = f"Bearer {config.HF_TOKEN}"
 
-            contents = []
-            system_instruction_parts = []
+        hf_payload = {
+            "model": config.HF_LLM_MODEL,
+            "messages": payload.get("messages", []),
+            "temperature": 0.3,
+        }
 
-            for msg in payload.get("messages", []):
-                role = msg.get("role")
-                content = msg.get("content", "")
-                if role == "system":
-                    system_instruction_parts.append({"text": content})
-                elif role == "user":
-                    contents.append({"role": "user", "parts": [{"text": content}]})
-                elif role in ("assistant", "model"):
-                    contents.append({"role": "model", "parts": [{"text": content}]})
+        response = _call_with_retry(_HF_LLM_URL, headers, hf_payload, logger)
 
-            gemini_payload = {"contents": contents}
-            if system_instruction_parts:
-                gemini_payload["systemInstruction"] = {"parts": system_instruction_parts}
-
-            headers = {"Content-Type": "application/json"}
-            response = _call_with_retry(url, headers, gemini_payload, logger)
-
-            if response.status_code != 200:
-                logger.error(f"Gemini API Error: {response.text} (Status: {response.status_code})")
-                return "Error communicating with Gemini API"
-
-            data = response.json()
-            reply = (
-                data.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text")
+        if response.status_code != 200:
+            logger.error(
+                f"HF LLM API error: HTTP {response.status_code} — {response.text}"
             )
-            return reply or "No response from Gemini API"
+            return "Error communicating with the language model. Please try again."
 
-        elif config.LLM_PROVIDER == "huggingface":
-            url = "https://router.huggingface.co/v1/chat/completions"
-            headers = {"Content-Type": "application/json"}
-            if config.HF_TOKEN:
-                headers["Authorization"] = f"Bearer {config.HF_TOKEN}"
+        data = response.json()
+        reply: str | None = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content")
+        )
+        return reply or "No response was returned by the language model."
 
-            hf_payload = {
-                "model": config.HF_LLM_MODEL,
-                "messages": payload.get("messages", []),
-                "temperature": 0.3,
-            }
-
-            response = _call_with_retry(url, headers, hf_payload, logger)
-
-            if response.status_code != 200:
-                logger.error(f"HF LLM API Error: {response.text} (Status: {response.status_code})")
-                return "Error communicating with Hugging Face LLM API"
-
-            data = response.json()
-            reply = (
-                data.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content")
-            )
-            return reply or "No response from Hugging Face LLM"
-
-        else:
-            logger.error("LLM_PROVIDER is not configured to a supported value ('gemini' or 'huggingface').")
-            return "LLM provider not configured."
-
-    except Exception as e:
-        logger.error(f"LLM Error: {str(e)}")
-        return "Error communicating with LLM"
+    except Exception:
+        logger.exception("Unhandled exception in call_llm")
+        return "Error communicating with the language model."
