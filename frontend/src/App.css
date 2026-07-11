@@ -1,5 +1,6 @@
 /* ✅ Prevent whole page scrolling */
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
   overflow: hidden;
@@ -30,34 +31,55 @@ html, body {
   height: 60px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   background: #0f172a;
   z-index: 100;
   border-bottom: 1px solid #1e293b;
   box-sizing: border-box;
-  padding: 0 16px;
+  padding: 0 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-icon {
+  color: #6366f1;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 22px;
-  flex: 1;
-  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: #f1f5f9;
 }
 
 /* P9/P10: header action buttons */
 .header-actions {
   display: flex;
-  gap: 8px;
-  position: absolute;
-  right: 16px;
+  gap: 10px;
+  align-items: center;
+}
+
+.header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-icon {
+  flex-shrink: 0;
 }
 
 /* ✅ Chat area (ONLY scrollable part) */
 .chat-container {
   position: absolute;
-  top: 60px;          /* below header */
-  bottom: 80px;       /* above input */
+  top: 60px;
+  /* below header */
+  bottom: 80px;
+  /* above input */
   left: 0;
   right: 0;
   overflow-y: auto;
@@ -74,36 +96,89 @@ html, body {
   opacity: 0.6;
 }
 
-/* Chat bubbles */
-.chat-bubble {
-  padding: 14px 16px;
-  border-radius: 16px;
-  max-width: 70%;
-  line-height: 1.5;
-  font-size: 14px;
+/* Chat Items & Tags */
+.chat-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   animation: fadeUp 0.25s ease;
+}
+
+.chat-item.user {
+  align-items: flex-end;
+}
+
+.chat-item.bot {
+  align-items: flex-start;
+}
+
+.chat-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.chat-item.user .chat-tag {
+  color: #60a5fa;
+}
+
+.chat-item.bot .chat-tag {
+  color: #818cf8;
+}
+
+/* Chat bubbles (Rounded corners, max-width 70%, conversational layout) */
+.chat-bubble {
+  max-width: 70%;
+  box-sizing: border-box;
+  padding: 16px 20px;
+  border-radius: 16px;
+  line-height: 1.6;
+  font-size: 16px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* User */
 .chat-bubble.user {
-  align-self: flex-end;
-  background: linear-gradient(135deg, #4facfe, #00c6ff);
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
   color: white;
+  border-top-right-radius: 4px;
 }
 
 /* Bot */
 .chat-bubble.bot {
-  align-self: flex-start;
   background: #1e293b;
   color: #e5e7eb;
   border: 1px solid #334155;
+  border-top-left-radius: 4px;
 }
 
 /* Text format */
-.chat-bubble pre {
+.msg-text {
   margin: 0;
   white-space: pre-wrap;
   font-family: inherit;
+  word-break: break-word;
+}
+
+/* Timestamps inside chat bubble (bottom right) */
+.bubble-timestamp {
+  font-size: 11px;
+  align-self: flex-end;
+  margin-top: 8px;
+  user-select: none;
+}
+
+.chat-bubble.user .bubble-timestamp {
+  color: #bfdbfe;
+  opacity: 0.8;
+}
+
+.chat-bubble.bot .bubble-timestamp {
+  color: #94a3b8;
+  opacity: 0.7;
 }
 
 /* ✅ Fixed input (bottom, no movement) */
@@ -111,28 +186,48 @@ html, body {
   position: fixed;
   bottom: 0;
   width: 100%;
-  height: 80px;
+  height: 90px;
   display: flex;
   justify-content: center;
   align-items: center;
   background: rgba(15, 23, 42, 0.95);
-  border-top: 1px solid #334155;
+  border-top: 1px solid #1e293b;
+  padding: 0 48px;
+  box-sizing: border-box;
 }
 
-/* Input */
-.input-section input {
-  width: 420px;
-  padding: 12px 16px;
-  margin-right: 10px;
-  border-radius: 25px;
-  border: 1px solid #334155;
+/* Unified Rounded-Rectangle Input Wrapper */
+.input-wrapper {
+  width: 100%;
+  max-width: 900px;
+  height: 56px;
+  display: flex;
+  align-items: center;
   background-color: #1e293b;
-  color: #e5e7eb;
-  outline: none;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 0 8px 0 16px;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.input-section input:focus {
-  border-color: #667eea;
+.input-wrapper:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+
+.input-wrapper input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e5e7eb;
+  font-size: 16px;
+  padding: 12px 0;
+}
+
+.input-wrapper input::placeholder {
+  color: #64748b;
 }
 
 /* ── Shared button styles ─────────────────────────────────────────────────── */
@@ -168,18 +263,63 @@ html, body {
   background: #253347;
 }
 
-/* Keep the send button using btn-primary rules via the input-section context */
-.input-section button {
-  padding: 12px 20px;
-  border-radius: 25px;
+/* Send button inside unified input wrapper */
+.input-wrapper button#chat-send-btn {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
   border: none;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
   color: white;
   cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s, transform 0.1s;
+  flex-shrink: 0;
 }
 
-.input-section button:disabled {
+.input-wrapper button#chat-send-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.input-wrapper button#chat-send-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.input-wrapper button#chat-send-btn:disabled {
+  background: #334155;
+  color: #475569;
+  cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Attachment clip button */
+.input-icon-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  transition: color 0.2s, background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.input-icon-btn:hover {
+  color: #f1f5f9;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.send-icon {
+  width: 18px;
+  height: 18px;
 }
 
 /* ── P10: Upload panel ───────────────────────────────────────────────────── */
@@ -261,6 +401,7 @@ html, body {
     opacity: 0;
     transform: translateY(6px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

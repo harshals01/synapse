@@ -14,6 +14,27 @@ const generateId = () =>
 
 const getTimestamp = () => new Date().toISOString();
 
+const formatMessage = (text) => {
+  if (!text) return "";
+  const tokens = text.split("**");
+  return tokens.map((token, i) => {
+    if (i % 2 === 1) {
+      return <strong key={i}>{token}</strong>;
+    }
+    return token;
+  });
+};
+
+const formatTime = (isoString) => {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+};
+
 function App() {
   const [query, setQuery] = useState("");
 
@@ -175,19 +196,48 @@ function App() {
 
       {/* HEADER */}
       <div className="header">
-        <h1>Synapse</h1>
+        <div className="brand">
+          <svg className="brand-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-4.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2z"/>
+            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-4.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2z"/>
+          </svg>
+          <h1>Synapse</h1>
+        </div>
         <div className="header-actions">
           <button
-            className="btn-secondary"
+            className="btn-secondary header-btn"
             onClick={() => {
               setShowUpload((v) => !v);
               setUploadStatus(null);
             }}
           >
-            {showUpload ? "← Chat" : "📄 Upload PDF"}
+            {showUpload ? (
+              <>
+                <svg className="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Chat</span>
+              </>
+            ) : (
+              <>
+                <svg className="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>Upload PDF</span>
+              </>
+            )}
           </button>
-          <button className="btn-secondary" onClick={clearChat}>
-            Clear Chat
+          <button className="btn-secondary header-btn" onClick={clearChat}>
+            <svg className="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            <span>Clear Chat</span>
           </button>
         </div>
       </div>
@@ -241,14 +291,18 @@ function App() {
           {messages.length === 0 ? (
             <p className="empty">Start the conversation…</p>
           ) : (
-            messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`chat-bubble ${msg.role === "user" ? "user" : "bot"}`}
-              >
-                <pre>{msg.content}</pre>
-              </div>
-            ))
+            messages.map((msg) => {
+              const isUser = msg.role === "user";
+              return (
+                <div key={msg.id} className={`chat-item ${isUser ? "user" : "bot"}`}>
+                  <div className="chat-tag">{isUser ? "User" : "Synapse"}</div>
+                  <div className={`chat-bubble ${isUser ? "user" : "bot"}`}>
+                    <div className="msg-text">{formatMessage(msg.content)}</div>
+                    <span className="bubble-timestamp">{formatTime(msg.timestamp)}</span>
+                  </div>
+                </div>
+              );
+            })
           )}
           <div ref={bottomRef}></div>
         </div>
@@ -257,22 +311,40 @@ function App() {
       {/* INPUT */}
       {!showUpload && (
         <div className="input-section">
-          <input
-            id="chat-input"
-            type="text"
-            placeholder="Send a message…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && query.trim() && !loading) {
-                handleSearch();
-              }
-            }}
-          />
-
-          <button id="chat-send-btn" onClick={handleSearch} disabled={loading}>
-            {loading ? "Sending…" : "Send"}
-          </button>
+          <div className="input-wrapper">
+            <button className="input-icon-btn attachment-btn" type="button" title="Attach file">
+              <svg className="input-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+              </svg>
+            </button>
+            <input
+              id="chat-input"
+              type="text"
+              placeholder="Ask anything about your PDF…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && query.trim() && !loading) {
+                  handleSearch();
+                }
+              }}
+            />
+            <button
+              id="chat-send-btn"
+              onClick={handleSearch}
+              disabled={loading || !query.trim()}
+              title="Send message"
+            >
+              {loading ? (
+                <span className="spinner"></span>
+              ) : (
+                <svg className="send-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>
