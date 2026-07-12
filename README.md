@@ -4,264 +4,255 @@ A production-ready, cloud-native Retrieval-Augmented Generation (RAG) platform t
 
 ---
 
-## 1. Overview
+## 📋 Table of Contents
+* [Overview](#-overview)
+* [Key Features](#-key-features)
+* [System Architecture](#️-system-architecture)
+* [Tech Stack](#️-tech-stack)
+* [Folder Structure](#-folder-structure)
+* [RAG Pipeline Deep Dive](#-rag-pipeline-deep-dive)
+* [API Endpoints](#-api-endpoints)
+* [Environment Variables](#-environment-variables)
+* [Getting Started](#-getting-started)
+* [Design Decisions & Trade-offs](#-design-decisions--trade-offs)
 
-Synapse is an AI-powered conversational search system designed to extract, index, and query information from large document stores (like PDFs). It targets developers, data operators, and technical teams looking for a reliable, performant, and quota-safe RAG workflow.
+---
 
-### The Problem it Solves
+## 🌟 Overview
+Synapse is a high-performance conversational search system designed to extract, index, and query information from large document stores (like PDFs). 
+
+### The Problem It Solves
 Standard vector search frequently misses exact keyword terms (like specific codes, SKUs, or product names) because of dense embedding generalizations. On the other hand, traditional keyword search lacks semantic nuance. Synapse solves this by implementing **Hybrid Search (Dense Cosine Similarity + Sparse Text Match)** merged through **Reciprocal Rank Fusion (RRF)**.
 
-### Major Capabilities
-*   **Idempotent PDF Ingestion:** Processes multi-page PDF documents, chunks them using paragraph-sentence alignment, generates dense vectors, and stores them under deterministic IDs to prevent index duplicates.
-*   **Heuristic Query Context-Rewriting:** Deterministically resolves pronouns (like "it", "this", "that") from conversational context without triggering costly LLM processing.
+Both features (PDF ingestion and conversational chat) run on top of an API key-protected layer, ensuring secure endpoint access.
+
+---
+
+## ✨ Key Features
+*   **Idempotent PDF Ingestion:** Processes multi-page PDF documents, chunks them using paragraph-sentence alignment, generates dense vectors, and stores them under deterministic UUIDv5 IDs to prevent index duplicates.
 *   **Dual-Engine Hybrid Retrieval:** Runs semantic query matching on Qdrant vectors alongside lexical keyword matching on payload indexes.
-*   **Hallucination-Blocker Safeguards:** Aborts LLM completion calls when the maximum RRF relevance score fails to satisfy the minimum threshold, ensuring the system only returns grounded facts.
-*   **Flexible Completion Routing:** Automatically uses Google AI Studio's Gemini 2.0 Flash or falls back to Hugging Face Serverless LLMs (e.g. Qwen 2.5) using your existing `HF_TOKEN`.
+*   **Scoring & Fusion:** Employs Reciprocal Rank Fusion (RRF) to merge and normalize scores from vector and keyword search paths.
+*   **Hallucination-Blocker Safeguards:** Aborts LLM completion calls when the maximum RRF relevance score fails to satisfy the minimum confidence threshold (`LOW_CONFIDENCE_THRESHOLD`), returning a safe fallback.
+*   **Heuristic Query Context-Rewriting:** Deterministically resolves pronouns (like "it", "this", "that") from conversational context without triggering costly LLM processing.
+*   **Flexible Completion Routing:** Automatically uses Google AI Studio's Gemini 2.0 Flash or falls back to Hugging Face Serverless LLMs (e.g., Qwen 2.5).
+*   **Modern Interactive UI:** React single-page app styled with a modern glassmorphism layout, featuring real-time stream-rendered chat replies and asynchronous file upload feedback.
 
 ---
 
-## 2. Features
+## 🏗️ System Architecture
 
-*   **Document Processing:** Robust PDF parser (`pypdf`), chunking with custom size (700 characters) and overlap (70 characters).
-*   **Vector Search:** Full Qdrant Cloud integration, deterministic uuid5 coordinate points generation, dynamic collection creation, and index configuration.
-*   **Lexical Indexing:** Custom payload keyword matching on the `combined` text schema.
-*   **Scoring & Fusion:** Reciprocal Rank Fusion (RRF) combining vector rankings and keyword search outputs.
-*   **Conversation Memory:** Clean browser session caching with 50-message context limitations and heuristic pronoun resolution.
-*   **Error Handling:** Retry backoff logic (rate-limit 429/503 handling) for external Hugging Face inference requests.
-*   **User Experience:** Stream-rendered bot responses for real-time visual feedback, and session history management.
-
----
-
-## 3. System Architecture
+### High-Level Component Relationship
 
 ```mermaid
 graph TD
     A[React SPA Frontend] -->|HTTP POST /ingest| B[FastAPI Ingestion Endpoint]
     A[React SPA Frontend] -->|HTTP POST /chat| C[FastAPI Chat Endpoint]
-    B -->|Batch Embeddings request| D[Hugging Face Serverless Inference API]
+    B -->|Batch Embeddings Request| D[Hugging Face Serverless Inference API]
     B -->|Bulk Vector Upsert| E[Qdrant Cloud Cluster]
     C -->|Context-Rewriter Heuristic| H[Conversation History Buffer]
     C -->|Embed Rewritten Query| D
     C -->|Semantic query_points / Keyword scroll| E
     C -->|Fusion & Context Assembly| F[RAG Pipeline]
-    F -->|Chat Completion request| G[LLM Generator: Gemini 2.0 Flash / Qwen 2.5]
+    F -->|Chat Completion Request| G[LLM Generator: Gemini 2.0 Flash / Qwen 2.5]
 ```
 
-*   **Frontend:** A responsive Single Page Application (SPA) built using Vite and React, communicating with the backend over REST endpoints via Axios.
-*   **FastAPI Backend:** Handles ingestion and query parsing async boundaries, keeping response latencies low.
-*   **Embedding Pipeline:** Coordinates batches with Hugging Face's `all-MiniLM-L6-v2` via Serverless Inference.
-*   **Search Engine:** Stores vectors (384 dimensions) and payloads inside Qdrant Cloud.
-*   **LLM Completion:** Grounds prompts and queries them to Gemini or Hugging Face.
+### RAG Data Flow Flowchart
+```mermaid
+graph TD
+    UserPDF[User Uploads PDF] -->|POST /ingest| Validate[FastAPI /ingest: Validation & Authentication]
+    Validate -->|1. Extract Text| Parse[pypdf: Extract raw text from PDF bytes]
+    Parse -->|2. Paragraph-Sentence Chunking| Chunk[Text Processor: 700 chars / 70 overlap]
+    Chunk -->|3. Batch Embeddings| Embed[HF Inference: sentence-transformers/all-MiniLM-L6-v2]
+    Embed -->|4. Generate Deterministic IDs| UUID[UUIDv5: doc_filename_chunkindex]
+    UUID -->|5. Vector Store Upsert| Upsert[Bulk Upsert to Qdrant Cloud Collection]
+```
 
 ---
 
-## 4. Technology Stack
+## 🛠️ Tech Stack
 
-### Frontend
-*   **Vite + React (v18)**: Core framework and fast build tooling.
-*   **Axios**: Promise-based HTTP client for API interactions.
-*   **Vanilla CSS**: Custom responsive layout stylesheet.
+### Backend & API
+| Technology | Purpose |
+| :--- | :--- |
+| **FastAPI** | High-performance ASGI Python framework with native async support and automatic OpenAPI documentation. |
+| **Uvicorn** | High-efficiency ASGI web server implementation. |
+| **Pydantic v2** | Strict type-checking, data validation, and settings management schemas. |
+| **pypdf** | High-efficiency parser library to read and extract text from PDF files. |
+| **python-dotenv** | Environment configuration variables parser. |
 
-### Backend
-*   **FastAPI**: High-performance ASGI Python framework.
-*   **Uvicorn**: Lightning-fast ASGI web server implementation.
-*   **Pydantic (v2)**: Strict type-checking and data validation schemas.
-*   **pypdf**: High-efficiency PDF parsing library.
-*   **python-dotenv**: Environment file configurations parser.
+### AI / LLM / Vector DB
+| Technology | Purpose |
+| :--- | :--- |
+| **Qdrant Cloud** | Cloud-native vector search engine supporting dense vectors and full-text payload indexing. |
+| **Hugging Face Serverless API** | Generates 384-dimensional dense vectors using `sentence-transformers/all-MiniLM-L6-v2`. |
+| **Google AI Studio (Gemini 2.0 Flash)** | High-speed, long-context primary LLM for answer generation. |
+| **Hugging Face Serverless (Qwen 2.5)** | Fallback LLM provider (`Qwen/Qwen2.5-7B-Instruct`) for completions. |
 
-### AI / LLM / Embeddings
-*   **Hugging Face Serverless Inference API**: Powering embeddings (`sentence-transformers/all-MiniLM-L6-v2`) and fallback chat completions (`Qwen/Qwen2.5-7B-Instruct`).
-*   **Google AI Studio (Gemini 2.0 Flash)**: High-speed primary LLM provider.
-
-### Vector Database
-*   **Qdrant Cloud (Free tier)**: Multi-tenant vector collection, indexing, and payload filtering.
+### Frontend Client
+| Technology | Purpose |
+| :--- | :--- |
+| **React 18 & Vite** | Core frontend UI library and rapid hot-module replacement (HMR) bundler. |
+| **Axios** | Promise-based HTTP client for interacting with the backend API. |
+| **Vanilla CSS** | Custom responsive layout with modern typography, glassmorphism, and transitions. |
 
 ---
 
-## 5. Folder Structure
+## 📁 Folder Structure
+
+Below is the repository structure containing backend code, frontend interface, and test modules:
 
 ```
 rag-main/
-├── .env.example            # Environment configuration template
-├── .gitignore              # Ignored files template for Git
-├── requirements.txt        # Runtime and test dependency package manifests
-├── README.md               # Production-grade documentation
-├── context.md              # System architecture reference map
-├── app/                    # Backend application source code
-│   ├── config.py           # Application configurations and environment constants
-│   ├── logger.py           # Custom logging utility
-│   ├── main.py             # ASGI entrypoint and middleware configurations
-│   ├── models/             # Pydantic schema validation structures
-│   │   └── request_models.py
-│   ├── routes/             # REST routing endpoints
-│   │   ├── chat.py         # Conversational RAG pipeline endpoint
-│   │   └── ingest.py       # PDF document parser and indexer endpoint
-│   ├── services/           # Underlying business logic pipelines
-│   │   ├── create_index.py
-│   │   ├── embedding_service.py # Hugging Face embed retry & batch logic
-│   │   ├── fusion_service.py    # Reciprocal Rank Fusion implementation
-│   │   ├── ingest_service.py
-│   │   ├── llm_service.py       # Gemini and Hugging Face completions client
-│   │   ├── qdrant_service.py    # Qdrant client connection and search hooks
-│   │   └── search_service.py    # Combines vector and lexical search runs
-│   └── utils/              # Helper utility modules
-│       └── query_utils.py  # Conversational history query refiner
-├── frontend/               # React client SPA source code
-│   ├── package.json
-│   ├── index.html
-│   ├── vite.config.js
+├── [env.example](file:///c:/Users/BIT/Desktop/rag-main/.env.example)            # Environment configuration template
+├── [.gitignore](file:///c:/Users/BIT/Desktop/rag-main/.gitignore)              # Ignored files template for Git
+├── [requirements.txt](file:///c:/Users/BIT/Desktop/rag-main/requirements.txt)        # Runtime and test dependency package manifests
+├── [README.md](file:///c:/Users/BIT/Desktop/rag-main/README.md)               # Production-grade documentation (this file)
+├── [context.md](file:///c:/Users/BIT/Desktop/rag-main/context.md)              # System architecture reference map
+├── app/                            # FastAPI Python Backend
+│   ├── [main.py](file:///c:/Users/BIT/Desktop/rag-main/app/main.py)             # ASGI entrypoint and middleware configurations
+│   ├── [config.py](file:///c:/Users/BIT/Desktop/rag-main/app/config.py)           # Application configurations and environment constants
+│   ├── [logger.py](file:///c:/Users/BIT/Desktop/rag-main/app/logger.py)           # Custom logging utility
+│   ├── [auth.py](file:///c:/Users/BIT/Desktop/rag-main/app/auth.py)             # API key header-based authentication dependency
+│   ├── models/                     # Pydantic schema validation structures
+│   │   └── [request_models.py](file:///c:/Users/BIT/Desktop/rag-main/app/models/request_models.py)
+│   ├── routes/                     # REST routing endpoints
+│   │   ├── [chat.py](file:///c:/Users/BIT/Desktop/rag-main/app/routes/chat.py)         # Conversational RAG pipeline endpoint
+│   │   └── [ingest.py](file:///c:/Users/BIT/Desktop/rag-main/app/routes/ingest.py)       # PDF document parser and indexer endpoint
+│   ├── services/                   # Underlying business logic pipelines
+│   │   ├── [create_index.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/create_index.py) # Script/service to initialize Qdrant database collection
+│   │   ├── [embedding_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/embedding_service.py) # Hugging Face embed retry & batch logic
+│   │   ├── [fusion_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/fusion_service.py)    # Reciprocal Rank Fusion implementation
+│   │   ├── [ingest_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/ingest_service.py)    # Ingestion orchestration logic
+│   │   ├── [llm_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/llm_service.py)       # Gemini and Hugging Face completions client
+│   │   ├── [qdrant_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/qdrant_service.py)    # Qdrant client connection and search hooks
+│   │   └── [search_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/search_service.py)    # Combines vector and lexical search runs
+│   └── utils/                      # Helper utility modules
+│       └── [query_utils.py](file:///c:/Users/BIT/Desktop/rag-main/app/utils/query_utils.py)  # Conversational history query refiner (pronoun resolution)
+├── frontend/                       # React client SPA source code
+│   ├── [package.json](file:///c:/Users/BIT/Desktop/rag-main/frontend/package.json)        # Frontend dependencies & run scripts
+│   ├── [index.html](file:///c:/Users/BIT/Desktop/rag-main/frontend/index.html)          # Main HTML entry point
+│   ├── [vite.config.js](file:///c:/Users/BIT/Desktop/rag-main/frontend/vite.config.js)      # Vite configuration file
 │   └── src/
-│       ├── App.css         # Component and chat layouts styling
-│       ├── App.jsx         # Chat interface and API logic
-│       ├── index.css       # Core typography systems and layout resets
-│       └── main.jsx
-└── tests/                  # Pytest test cases
-    ├── conftest.py         # Mock programmatic PDF fixtures
-    └── test_embedding.py   # Embedding pipeline validation tests
+│       ├── [App.css](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/App.css)         # Component and chat layouts styling
+│       ├── [App.jsx](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/App.jsx)         # Chat interface and API logic
+│       ├── [index.css](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/index.css)       # Core typography systems and resets
+│       └── [main.jsx](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/main.jsx)        # React entrypoint
+└── tests/                          # Pytest test cases
+    ├── [conftest.py](file:///c:/Users/BIT/Desktop/rag-main/tests/conftest.py)         # Mock programmatic PDF fixtures
+    └── [test_embedding.py](file:///c:/Users/BIT/Desktop/rag-main/tests/test_embedding.py)   # Embedding pipeline validation tests
 ```
 
 ---
 
-## 6. RAG Pipeline Deep Dive
+## 🔬 RAG Pipeline Deep Dive
 
-### Ingestion Flow Diagram
-```
-[PDF File] 
-   │
-   ▼
-[Text Extraction (PdfReader)]
-   │
-   ▼
-[Chunking Heuristics (700 Chars / 70 Overlap)]
-   │
-   ▼
-[Hugging Face Embedding Batches (all-MiniLM-L6-v2)]
-   │
-   ▼
-[PointStruct Construction (uuid5 deterministic IDs)]
-   │
-   ▼
-[Bulk Upsert to Qdrant Cloud]
-```
+### 1. Ingestion & Idempotent Vector Upsert
+*   **PDF Extraction:** The PDF is read directly from memory bytes, and text is extracted page by page using `pypdf`.
+*   **Recursive Chunking:** Text is broken into chunks of `700` characters with a sliding overlap of `70` characters. Chunking heuristics prioritize sentence and paragraph boundaries to preserve semantic context.
+*   **Hugging Face Batch Embedding:** Chunks are grouped into batches (default size `5`) and sent to the Hugging Face Serverless Inference API using `sentence-transformers/all-MiniLM-L6-v2` to generate 384-dimensional dense vectors.
+*   **Deterministic UUIDv5 Generation:** To prevent duplicate document uploads and data drift, a deterministic coordinate ID is created using the naming scheme: `doc_{filename}_{chunk_index}`. Re-uploading a file with the same name replaces existing vectors at those identical coordinates.
 
-1.  **PDF Parsing:** When a PDF is posted to `/ingest`, raw bytes are read into `PdfReader` to extract textual page characters.
-2.  **Paragraph-Sentence Chunking:** Text is split using paragraph boundaries (`\n\n`) and sentence delimiters, grouping sentences up to `700` characters, keeping a `70` character overlap to maintain semantic continuity.
-3.  **Hugging Face Inference Batching:** Chunks are sent in configurable batches (default `5` per request) to `https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction`.
-4.  **Idempotence Guardrails:** For each chunk, a deterministic namespace UUIDv5 is generated using the schema: `doc_{filename}_{chunk_index}`. If a file is uploaded again, it updates the existing points instead of creating duplicates.
-5.  **Vector Store Upsert:** Vectors and payloads (containing the source file name and text) are bulk-written to Qdrant Cloud.
-
----
-
-## 7. Retrieval & Chat Workflow
-
-1.  **Heuristic Query Rewriting:** The user message is checked for pronouns. If found, Synapse scans the history and replaces pronouns with the resolved entity.
-2.  **Semantic Search:** The query is embedded via Hugging Face and sent to Qdrant using the `query_points` API.
-3.  **Lexical Keyword Search:** In parallel, if an entity is extracted, a Qdrant `scroll` query matching `MatchText` filters values on the `combined` text payload.
-4.  **Reciprocal Rank Fusion (RRF):** The rankings are combined using the formula:
+### 2. Dual-Engine Retrieval & Fusion
+*   **Semantic Query Matching:** The user's query is embedded, and a cosine-similarity k-NN search is run against Qdrant to retrieve the top dense hits.
+*   **Lexical MatchText Search:** In parallel, a search is performed using Qdrant's `scroll` query filtering text payload entries in the `combined` keyword index.
+*   **Reciprocal Rank Fusion (RRF):** The rankings are combined using the formula:
     $$RRF\_Score(d) = \sum_{m \in M} \frac{1}{60 + r_m(d)}$$
-5.  **Confidence Block:** If the top-scoring document has an RRF score below `LOW_CONFIDENCE_THRESHOLD` (default `0.015`), the query is aborted, and `"No relevant context found."` is returned immediately without contacting the LLM.
-6.  **Prompt Construction:** The top matching documents are assembled into system instructions and sent to the LLM (Gemini or Hugging Face) for answer completion.
+    where $M$ consists of vector search and keyword search.
+
+### 3. Confidence Safeguard Threshold
+Before invoking the LLM, the highest-scoring candidate is checked. If the RRF score is below `LOW_CONFIDENCE_THRESHOLD` (default `0.015`), the query is aborted. This blocks hallucinated responses and returns a generic fallback (`"No relevant context found."`).
 
 ---
 
-## 8. API Documentation
+## 📡 API Endpoints
 
-| Method | Route | Description | Auth | Request Body | Response Schema |
+### Route Security
+Routes accept an optional API key in the `X-API-Key` header. If `API_ACCESS_KEY` is not set in `.env` (empty string), authentication check passes silently.
+
+| Method | Endpoint | Description | Auth Headers | Request Payload | Response Schema |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **POST** | `/ingest` | Parse PDF, chunk, embed, and index in Qdrant. | None | `file: UploadFile` (Multipart) | `{"status": "success", "file": str, "chunks_indexed": int, ...}` |
-| **POST** | `/chat` | Conversational RAG search and answer generation. | None | `{"messages": list, "top_k": int}` | `{"reply": str, "llm_called": bool, "hits_used": int, ...}` |
+| **POST** | `/ingest` | Parse PDF, chunk, embed, and index in Qdrant | `X-API-Key` (Optional) | Multipart `file: UploadFile` | `{"status": "success", "file": str, "chunks_indexed": int}` |
+| **POST** | `/chat` | Context-aware RAG search and answer generation | `X-API-Key` (Optional) | `ChatRequest` JSON payload | `{"reply": str, "llm_called": bool, "hits_used": int, "max_score": float}` |
 
 ---
 
-## 9. Environment Variables
+## 🔑 Environment Variables
 
 Create a `.env` file in the root directory. Below are the variables required:
 
-```dotenv
-# ── Vector Store (Qdrant Cloud) ───────────────────────────────────
-QDRANT_URL=https://<your-cluster-id>.<region>.gcp.cloud.qdrant.io
-QDRANT_API_KEY=<your-qdrant-cloud-api-key>
-INDEX_NAME=data_store
-
-# ── Embedding (Hugging Face Serverless Inference) ─────────────────
-HF_TOKEN=hf_<your-huggingface-token>
-# Optional override:
-# HF_EMBEDDING_API_URL=https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction
-
-# ── LLM (Gemini 2.0 Flash OR Hugging Face Serverless) ─────────────
-LLM_PROVIDER=gemini # "gemini" or "huggingface"
-GEMINI_API_KEY=AIza<your-google-ai-studio-api-key>
-# If LLM_PROVIDER=huggingface, specify the model:
-HF_LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
-
-# ── RAG Thresholds & Ingestion Tuning ─────────────────────────────
-LOW_CONFIDENCE_THRESHOLD=0.015
-MAX_CONTEXT_DOCS=20
-INGEST_BATCH_SIZE=5
-MAX_EMBED_RETRIES=3
-```
+| Variable | Description | Default / Example Value |
+| :--- | :--- | :--- |
+| `QDRANT_URL` | Qdrant database server URL | `http://localhost:6333` |
+| `QDRANT_API_KEY` | Access token key for Qdrant Cloud | `your_qdrant_api_key_here` |
+| `INDEX_NAME` | Name of the collection in Qdrant database | `data_store` |
+| `HF_TOKEN` | Hugging Face Access Token | `hf_your_token_here` |
+| `HF_EMBEDDING_API_URL` | Embeddings model endpoint url | `https://router.huggingface.co/hf-inference/...` |
+| `LLM_PROVIDER` | Active LLM completion engine selector | `gemini` (or `huggingface`) |
+| `GEMINI_API_KEY` | Google AI Studio Developer API Key | `your_google_ai_studio_api_key` |
+| `HF_LLM_MODEL` | Hugging Face fallback LLM model name | `Qwen/Qwen2.5-7B-Instruct` |
+| `LOW_CONFIDENCE_THRESHOLD` | Guard threshold score to prevent hallucinations | `0.015` |
+| `MAX_CONTEXT_DOCS` | Upper limit of context documents fed to prompt | `20` |
+| `INGEST_BATCH_SIZE` | Chunk count size limit for embedding requests | `5` |
+| `API_ACCESS_KEY` | Token key for route header security | `leave_empty_for_no_auth` |
 
 ---
 
-## 10. Installation & Run Guide
+## 🚀 Getting Started
 
 ### Prerequisites
 *   Python 3.10+
 *   Node.js v18+ & npm
+*   A Qdrant instance (Local via Docker or Cloud account)
 
 ### Backend Setup
-1.  Navigate to root and create a virtual environment:
+1.  **Create and activate a virtual environment:**
     ```powershell
     python -m venv .venv
-    .venv\Scripts\activate
+    .venv\Scripts\activate      # Windows Powershell
+    # source .venv/bin/activate  # macOS / Linux
     ```
-2.  Install dependencies:
+2.  **Install dependencies:**
     ```powershell
     pip install -r requirements.txt
     ```
-3.  Configure your environment variables inside a `.env` file.
-4.  Start FastAPI:
+3.  **Configure environment variables:**
+    Create your `.env` file based on the [Environment Variables](#-environment-variables) section.
+4.  **Initialize Vector Collection:**
+    ```powershell
+    python -m app.services.create_index
+    ```
+5.  **Start development server:**
     ```powershell
     uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
     ```
+    FastAPI interactive documentation is generated at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
 ### Frontend Setup
-1.  Navigate to the `frontend` folder:
+1.  **Navigate to the frontend folder:**
     ```powershell
     cd frontend
     ```
-2.  Install packages:
+2.  **Install client packages:**
     ```powershell
     npm install
     ```
-3.  Start the Vite dev server:
+3.  **Start Vite dev server:**
     ```powershell
     npm run dev
     ```
-
----
-
-## 11. Design Decisions
-
-*   **FastAPI & Uvicorn:** Chosen for native async concurrency, Pydantic type safety, and automatic OpenAPI schema validation.
-*   **Qdrant Cloud:** Outperforms traditional vector databases. Provides high-speed semantic matching (`query_points`) and full-text keyword indexing (`scroll` with text filters) in one place.
-*   **Hugging Face Serverless:** Replaces heavy local Python dependencies like `torch` and `transformers`. Features rate-limit retry protection on 429/503 responses, and falls back to serial queries on payload-too-large (413) responses.
-*   **Heuristic Context Rewriter:** Minimizes RAG latency by resolving ambiguous query pronouns via regex pattern checks, avoiding the cost of a LLM rewriting pass.
-
----
-
-## 12. Testing
-
-A clean test suite is implemented using `pytest` and `unittest.mock` to validate the embedding service without consuming API quotas.
+    The UI will be accessible at [http://localhost:5173](http://localhost:5173).
 
 ### Running Tests
-Activate your virtual environment and run:
+Activate the virtual environment and run the test suite with pytest:
 ```powershell
 pytest tests/ -v
 ```
 
 ---
 
-## 13. License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+## 📐 Design Decisions & Trade-offs
+*   **FastAPI & Uvicorn Async Bounds:** Heavy CPU-bound embedding calls and database requests are wrapped using Python's `loop.run_in_executor` block to keep FastAPI's async thread loop non-blocking and ultra-responsive.
+*   **Unified DB Search with Qdrant:** Rather than combining a distinct semantic search engine (e.g. Pinecone) with an external text index engine (e.g. Elasticsearch), Qdrant provides both dense index k-NN search and sparse keyword scroll indexing under a single engine.
+*   **Hugging Face Serverless Inference:** Reduces workspace setup overhead and GPU requirements by routing sentence-transformers embeddings remotely. Network transient issues are managed using automated 429/503 retry and backoff mechanisms.
+*   **Heuristic Context-Aware Pronoun Rewriter:** Improves multi-turn RAG conversation accuracy by resolving ambiguous query pronouns locally, bypassing costly pre-query LLM rewriting pipelines.
+*   **RRF Score Calibration:** Because Reciprocal Rank Fusion uses a rank-based ordinal approach rather than exact cosine similarities, setting absolute threshold boundaries (`LOW_CONFIDENCE_THRESHOLD`) requires empirical tuning to prevent incorrect context blocking.
