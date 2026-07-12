@@ -1,122 +1,189 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   Synapse — Global Design Tokens
+   Palette extracted from reference dashboard image.
+
+   FINAL COLOR PALETTE
+   ─────────────────────────────────────────────────────────
+   Primary Purple:   #7C5CFC   — brand, CTAs, user bubbles
+   Dark Purple:      #5F43E9   — hover, active
+   Lavender Tint:    #F3F0FF   — subtle purple bg
+   Blue Accent:      #6D8DFF   — info, bot bubbles
+   Light Blue:       #DCE7FF   — blue-tinted surfaces
+   Charcoal:         #1F1F29   — primary text, icons
+   Dark Grey:        #4B5563   — secondary text
+   Medium Grey:      #9CA3AF   — muted text, placeholders
+   Light Grey:       #F5F6F8   — subtle bg, inputs
+   Background:       #FAFAFB   — page bg (light)
+   Surface:          #FFFFFF   — cards, panels
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Light Theme ────────────────────────────────────────────────────────────── */
 :root {
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.6;
-  font-weight: 400;
+  --font-sans: "Geist", sans-serif;
 
-  /* Color system */
-  --bg-dark: #1e1e2f;
-  --bg-light: #ffffff;
-  --text-dark: #e4e6eb;
-  --text-light: #1f2937;
-  --primary: #6366f1;
-  --primary-hover: #4f54e0;
-  --accent: #22c55e;
-  --border: #2e2e3e;
+  /* Page & Surface */
+  --bg-page:      #FAFAFA;
+  --bg-surface:   #FFFFFF;
+  --bg-subtle:    #FAFAFA;
+  --bg-muted:     #EAEAEA;
+  --bg-elevated:  #FFFFFF;
 
-  color-scheme: light dark;
-  background-color: var(--bg-dark);
-  color: var(--text-dark);
+  /* Text */
+  --text-primary:   #111111;
+  --text-secondary: #8E8E93;
+  --text-muted:     #8E8E93;
+  --text-inverse:   #FFFFFF;
 
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+  /* Primary Purple — brand & CTAs */
+  --accent:         #8B5CF6;
+  --accent-hover:   #6D3EF2;
+  --accent-active:  #5B21B6;
+  --accent-subtle:  rgba(139, 92, 246, 0.08);
+  --accent-ring:    rgba(139, 92, 246, 0.22);
+  --accent-glow:    rgba(139, 92, 246, 0.18);
+  --lavender:       #EEE8FF;
+
+  /* Blue — informational, bot bubbles */
+  --blue:           #6C87D9;
+  --blue-hover:     #445A99;
+  --blue-subtle:    rgba(108, 135, 217, 0.1);
+  --blue-light:     #DDE7FF;
+  --blue-surface:   #DDE7FF;
+
+  /* Bot bubble colors */
+  --bubble-bot-bg:     #DDE7FF;
+  --bubble-bot-border: #EAEAEA;
+  --bubble-bot-text:   #111111;
+
+  /* Borders */
+  --border-default: #EAEAEA;
+  --border-strong:  #CCCCCC;
+
+  /* Shadows */
+  --shadow-xs:  0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-md:  0 10px 30px rgba(0, 0, 0, 0.08);
+  --shadow-lg:  0 18px 40px rgba(0, 0, 0, 0.12);
+  --shadow-btn: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* Radii */
+  --radius-xs:   4px;
+  --radius-sm:   12px;   /* Buttons radius */
+  --radius-md:   14px;   /* Inputs radius */
+  --radius-lg:   16px;   /* Message bubbles radius */
+  --radius-xl:   18px;   /* Cards radius / Modals radius */
+  --radius-full: 9999px;
+
+  /* Status */
+  --success-bg:     rgba(16, 185, 129, 0.08);
+  --success-border: rgba(16, 185, 129, 0.28);
+  --success-text:   #0d7a56;
+  --error-bg:       rgba(220, 53, 69, 0.08);
+  --error-border:   rgba(220, 53, 69, 0.28);
+  --error-text:     #b8202a;
+
+  color-scheme: light;
 }
 
-body {
+/* ── Dark Theme ─────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Page & Surface */
+  --bg-page:      #111216;
+  --bg-surface:   #1B1D24;
+  --bg-subtle:    #242733;
+  --bg-muted:     #2E3140;
+  --bg-elevated:  #2A2D3A;
+
+  /* Text */
+  --text-primary:   #F3F4F6;
+  --text-secondary: #A1A1AA;
+  --text-muted:     #6B6B7A;
+  --text-inverse:   #111216;
+
+  /* Purple */
+  --accent:         #8B5CF6;
+  --accent-hover:   #9D70FF;
+  --accent-active:  #7C4DFF;
+  --accent-subtle:  rgba(139, 92, 246, 0.12);
+  --accent-ring:    rgba(139, 92, 246, 0.28);
+  --accent-glow:    rgba(139, 92, 246, 0.22);
+  --lavender:       rgba(139, 92, 246, 0.1);
+
+  /* Blue */
+  --blue:           #6C87D9;
+  --blue-hover:     #8AA3FF;
+  --blue-subtle:    rgba(108, 135, 217, 0.1);
+  --blue-light:     rgba(108, 135, 217, 0.15);
+  --blue-surface:   rgba(108, 135, 217, 0.08);
+
+  /* Bot bubble colors */
+  --bubble-bot-bg:     #1E2642;
+  --bubble-bot-border: #2E3A5A;
+  --bubble-bot-text:   #F3F4F6;
+
+  /* Borders */
+  --border-default: #343844;
+  --border-strong:  #44485A;
+
+  /* Shadows */
+  --shadow-xs:  0 1px 3px rgba(0, 0, 0, 0.25);
+  --shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md:  0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-lg:  0 18px 40px rgba(0, 0, 0, 0.45);
+  --shadow-btn: 0 4px 16px rgba(0, 0, 0, 0.25);
+
+  /* Status */
+  --success-bg:     rgba(16, 185, 129, 0.1);
+  --success-border: rgba(16, 185, 129, 0.22);
+  --success-text:   #4ade9e;
+  --error-bg:       rgba(239, 68, 68, 0.1);
+  --error-border:   rgba(239, 68, 68, 0.22);
+  --error-text:     #f87171;
+
+  color-scheme: dark;
+}
+
+/* ── Reset & Base ───────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
   margin: 0;
-  display: flex;
-  place-items: center;
-  justify-content: center;
-  min-width: 320px;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #1e1e2f, #2a2a40);
+  padding: 0;
+  font-family: var(--font-sans);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  overflow: hidden;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
-h1 {
-  font-size: 2.8rem;
-  line-height: 1.2;
-  margin-bottom: 0.5em;
+#root { height: 100%; }
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-family: var(--font-sans);
   font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
 }
 
-p {
-  opacity: 0.85;
-}
+p { margin: 0; }
 
-/* Links */
 a {
-  font-weight: 500;
-  color: var(--primary);
+  color: var(--accent);
   text-decoration: none;
-  transition: color 0.2s ease;
-}
-a:hover {
-  color: var(--primary-hover);
-}
-
-/* Button */
-button {
-  border-radius: 10px;
-  border: 1px solid transparent;
-  padding: 0.65em 1.4em;
-  font-size: 1rem;
   font-weight: 500;
-  font-family: inherit;
+  transition: color 0.18s ease;
+}
+a:hover { color: var(--accent-hover); }
 
-  background: var(--primary);
-  color: white;
-
+button {
+  font-family: var(--font-sans);
   cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  transition: all 0.18s ease;
+  outline: none;
 }
-
-button:hover {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
-}
-
-button:active {
-  transform: scale(0.98);
-}
-
-button:focus,
 button:focus-visible {
-  outline: 3px solid rgba(99, 102, 241, 0.6);
-}
-
-/* Card container (optional but recommended) */
-.container {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2rem;
-  border-radius: 16px;
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
-  text-align: center;
-}
-
-/* Light theme */
-@media (prefers-color-scheme: light) {
-  :root {
-    background-color: var(--bg-light);
-    color: var(--text-light);
-  }
-
-  body {
-    background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
-  }
-
-  .container {
-    background: white;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-  }
-
-  a:hover {
-    color: #4338ca;
-  }
-
-  button {
-    background: var(--primary);
-  }
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
