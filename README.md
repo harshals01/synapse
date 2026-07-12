@@ -34,7 +34,7 @@ Both features (PDF ingestion and conversational chat) run on top of an API key-p
 *   **Scoring & Fusion:** Employs Reciprocal Rank Fusion (RRF) to merge and normalize scores from vector and keyword search paths.
 *   **Hallucination-Blocker Safeguards:** Aborts LLM completion calls when the maximum RRF relevance score fails to satisfy the minimum confidence threshold (`LOW_CONFIDENCE_THRESHOLD`), returning a safe fallback.
 *   **Heuristic Query Context-Rewriting:** Deterministically resolves pronouns (like "it", "this", "that") from conversational context without triggering costly LLM processing.
-*   **Flexible Completion Routing:** Automatically uses Google AI Studio's Gemini 2.0 Flash or falls back to Hugging Face Serverless LLMs (e.g., Qwen 2.5).
+*   **Completion Routing:** Uses Hugging Face Serverless LLMs (e.g., Qwen 2.5) using your `HF_TOKEN`.
 *   **Modern Interactive UI:** React single-page app styled with a modern glassmorphism layout, featuring real-time stream-rendered chat replies and asynchronous file upload feedback.
 
 ---
@@ -53,7 +53,7 @@ graph TD
     C -->|Embed Rewritten Query| D
     C -->|Semantic query_points / Keyword scroll| E
     C -->|Fusion & Context Assembly| F[RAG Pipeline]
-    F -->|Chat Completion Request| G[LLM Generator: Gemini 2.0 Flash / Qwen 2.5]
+    F -->|Chat Completion Request| G[LLM Generator: Hugging Face Serverless LLM]
 ```
 
 ### RAG Data Flow Flowchart
@@ -85,8 +85,7 @@ graph TD
 | :--- | :--- |
 | **Qdrant Cloud** | Cloud-native vector search engine supporting dense vectors and full-text payload indexing. |
 | **Hugging Face Serverless API** | Generates 384-dimensional dense vectors using `sentence-transformers/all-MiniLM-L6-v2`. |
-| **Google AI Studio (Gemini 2.0 Flash)** | High-speed, long-context primary LLM for answer generation. |
-| **Hugging Face Serverless (Qwen 2.5)** | Fallback LLM provider (`Qwen/Qwen2.5-7B-Instruct`) for completions. |
+| **Hugging Face Serverless (Qwen 2.5)** | Primary LLM provider (`Qwen/Qwen2.5-7B-Instruct`) for completions. |
 
 ### Frontend Client
 | Technology | Purpose |
@@ -103,43 +102,43 @@ Below is the repository structure containing backend code, frontend interface, a
 
 ```
 rag-main/
-├── [env.example](file:///c:/Users/BIT/Desktop/rag-main/.env.example)            # Environment configuration template
-├── [.gitignore](file:///c:/Users/BIT/Desktop/rag-main/.gitignore)              # Ignored files template for Git
-├── [requirements.txt](file:///c:/Users/BIT/Desktop/rag-main/requirements.txt)        # Runtime and test dependency package manifests
-├── [README.md](file:///c:/Users/BIT/Desktop/rag-main/README.md)               # Production-grade documentation (this file)
-├── [context.md](file:///c:/Users/BIT/Desktop/rag-main/context.md)              # System architecture reference map
-├── app/                            # FastAPI Python Backend
-│   ├── [main.py](file:///c:/Users/BIT/Desktop/rag-main/app/main.py)             # ASGI entrypoint and middleware configurations
-│   ├── [config.py](file:///c:/Users/BIT/Desktop/rag-main/app/config.py)           # Application configurations and environment constants
-│   ├── [logger.py](file:///c:/Users/BIT/Desktop/rag-main/app/logger.py)           # Custom logging utility
-│   ├── [auth.py](file:///c:/Users/BIT/Desktop/rag-main/app/auth.py)             # API key header-based authentication dependency
-│   ├── models/                     # Pydantic schema validation structures
-│   │   └── [request_models.py](file:///c:/Users/BIT/Desktop/rag-main/app/models/request_models.py)
-│   ├── routes/                     # REST routing endpoints
-│   │   ├── [chat.py](file:///c:/Users/BIT/Desktop/rag-main/app/routes/chat.py)         # Conversational RAG pipeline endpoint
-│   │   └── [ingest.py](file:///c:/Users/BIT/Desktop/rag-main/app/routes/ingest.py)       # PDF document parser and indexer endpoint
-│   ├── services/                   # Underlying business logic pipelines
-│   │   ├── [create_index.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/create_index.py) # Script/service to initialize Qdrant database collection
-│   │   ├── [embedding_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/embedding_service.py) # Hugging Face embed retry & batch logic
-│   │   ├── [fusion_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/fusion_service.py)    # Reciprocal Rank Fusion implementation
-│   │   ├── [ingest_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/ingest_service.py)    # Ingestion orchestration logic
-│   │   ├── [llm_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/llm_service.py)       # Gemini and Hugging Face completions client
-│   │   ├── [qdrant_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/qdrant_service.py)    # Qdrant client connection and search hooks
-│   │   └── [search_service.py](file:///c:/Users/BIT/Desktop/rag-main/app/services/search_service.py)    # Combines vector and lexical search runs
-│   └── utils/                      # Helper utility modules
-│       └── [query_utils.py](file:///c:/Users/BIT/Desktop/rag-main/app/utils/query_utils.py)  # Conversational history query refiner (pronoun resolution)
-├── frontend/                       # React client SPA source code
-│   ├── [package.json](file:///c:/Users/BIT/Desktop/rag-main/frontend/package.json)        # Frontend dependencies & run scripts
-│   ├── [index.html](file:///c:/Users/BIT/Desktop/rag-main/frontend/index.html)          # Main HTML entry point
-│   ├── [vite.config.js](file:///c:/Users/BIT/Desktop/rag-main/frontend/vite.config.js)      # Vite configuration file
+├── .env.example            # Environment configuration template
+├── .gitignore              # Ignored files template for Git
+├── requirements.txt        # Runtime and test dependency package manifests
+├── README.md               # Production-grade documentation (this file)
+├── context.md              # System architecture reference map
+├── app/                    # FastAPI Python Backend
+│   ├── main.py             # ASGI entrypoint and middleware configurations
+│   ├── config.py           # Application configurations and environment constants
+│   ├── logger.py           # Custom logging utility
+│   ├── auth.py             # API key header-based authentication dependency
+│   ├── models/             # Pydantic schema validation structures
+│   │   └── request_models.py
+│   ├── routes/             # REST routing endpoints
+│   │   ├── chat.py         # Conversational RAG pipeline endpoint
+│   │   └── ingest.py       # PDF document parser and indexer endpoint
+│   ├── services/           # Underlying business logic pipelines
+│   │   ├── create_index.py # Script/service to initialize Qdrant database collection
+│   │   ├── embedding_service.py # Hugging Face embed retry & batch logic
+│   │   ├── fusion_service.py    # Reciprocal Rank Fusion implementation
+│   │   ├── ingest_service.py    # Ingestion orchestration logic
+│   │   ├── llm_service.py       # Hugging Face completions client
+│   │   ├── qdrant_service.py    # Qdrant client connection and search hooks
+│   │   └── search_service.py    # Combines vector and lexical search runs
+│   └── utils/              # Helper utility modules
+│       └── query_utils.py  # Conversational history query refiner (pronoun resolution)
+├── frontend/               # React client SPA source code
+│   ├── package.json        # Frontend dependencies & run scripts
+│   ├── index.html          # Main HTML entry point
+│   ├── vite.config.js      # Vite configuration file
 │   └── src/
-│       ├── [App.css](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/App.css)         # Component and chat layouts styling
-│       ├── [App.jsx](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/App.jsx)         # Chat interface and API logic
-│       ├── [index.css](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/index.css)       # Core typography systems and resets
-│       └── [main.jsx](file:///c:/Users/BIT/Desktop/rag-main/frontend/src/main.jsx)        # React entrypoint
-└── tests/                          # Pytest test cases
-    ├── [conftest.py](file:///c:/Users/BIT/Desktop/rag-main/tests/conftest.py)         # Mock programmatic PDF fixtures
-    └── [test_embedding.py](file:///c:/Users/BIT/Desktop/rag-main/tests/test_embedding.py)   # Embedding pipeline validation tests
+│       ├── App.css         # Component and chat layouts styling
+│       ├── App.jsx         # Chat interface and API logic
+│       ├── index.css       # Core typography systems and resets
+│       └── main.jsx        # React entrypoint
+└── tests/                  # Pytest test cases
+    ├── conftest.py         # Mock programmatic PDF fixtures
+    └── test_embedding.py   # Embedding pipeline validation tests
 ```
 
 ---
@@ -187,9 +186,7 @@ Create a `.env` file in the root directory. Below are the variables required:
 | `INDEX_NAME` | Name of the collection in Qdrant database | `data_store` |
 | `HF_TOKEN` | Hugging Face Access Token | `hf_your_token_here` |
 | `HF_EMBEDDING_API_URL` | Embeddings model endpoint url | `https://router.huggingface.co/hf-inference/...` |
-| `LLM_PROVIDER` | Active LLM completion engine selector | `gemini` (or `huggingface`) |
-| `GEMINI_API_KEY` | Google AI Studio Developer API Key | `your_google_ai_studio_api_key` |
-| `HF_LLM_MODEL` | Hugging Face fallback LLM model name | `Qwen/Qwen2.5-7B-Instruct` |
+| `HF_LLM_MODEL` | Hugging Face LLM model name | `Qwen/Qwen2.5-7B-Instruct` |
 | `LOW_CONFIDENCE_THRESHOLD` | Guard threshold score to prevent hallucinations | `0.015` |
 | `MAX_CONTEXT_DOCS` | Upper limit of context documents fed to prompt | `20` |
 | `INGEST_BATCH_SIZE` | Chunk count size limit for embedding requests | `5` |
@@ -253,6 +250,6 @@ pytest tests/ -v
 ## 📐 Design Decisions & Trade-offs
 *   **FastAPI & Uvicorn Async Bounds:** Heavy CPU-bound embedding calls and database requests are wrapped using Python's `loop.run_in_executor` block to keep FastAPI's async thread loop non-blocking and ultra-responsive.
 *   **Unified DB Search with Qdrant:** Rather than combining a distinct semantic search engine (e.g. Pinecone) with an external text index engine (e.g. Elasticsearch), Qdrant provides both dense index k-NN search and sparse keyword scroll indexing under a single engine.
-*   **Hugging Face Serverless Inference:** Reduces workspace setup overhead and GPU requirements by routing sentence-transformers embeddings remotely. Network transient issues are managed using automated 429/503 retry and backoff mechanisms.
+*   **Hugging Face Serverless Inference:** Reduces workspace setup overhead and GPU requirements by routing sentence-transformers embeddings and LLM completions remotely. Network transient issues are managed using automated 429/503 retry and backoff mechanisms.
 *   **Heuristic Context-Aware Pronoun Rewriter:** Improves multi-turn RAG conversation accuracy by resolving ambiguous query pronouns locally, bypassing costly pre-query LLM rewriting pipelines.
 *   **RRF Score Calibration:** Because Reciprocal Rank Fusion uses a rank-based ordinal approach rather than exact cosine similarities, setting absolute threshold boundaries (`LOW_CONFIDENCE_THRESHOLD`) requires empirical tuning to prevent incorrect context blocking.
