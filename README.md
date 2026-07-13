@@ -2,6 +2,9 @@
 
 A production-ready, cloud-native Retrieval-Augmented Generation (RAG) platform that fuses semantic dense embeddings with exact full-text payload indexing, resolving user queries with zero hallucination.
 
+<img width="1912" height="792" alt="image" src="https://github.com/user-attachments/assets/5538252d-1664-4f49-a28e-ef11534ff79f" />
+
+
 ---
 
 ## 📋 Table of Contents
