@@ -192,6 +192,7 @@ Create a `.env` file in the root directory. Below are the variables required:
 | `HF_LLM_MODEL` | Hugging Face LLM model name | `Qwen/Qwen2.5-7B-Instruct` |
 | `LOW_CONFIDENCE_THRESHOLD` | Guard threshold score to prevent hallucinations | `0.015` |
 | `MAX_CONTEXT_DOCS` | Upper limit of context documents fed to prompt | `20` |
+| `CHAT_HISTORY_WINDOW` | Number of prior conversation turns sent to LLM as context | `6` |
 | `INGEST_BATCH_SIZE` | Chunk count size limit for embedding requests | `5` |
 | `API_ACCESS_KEY` | Token key for route header security | `leave_empty_for_no_auth` |
 
