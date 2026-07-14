@@ -14,34 +14,40 @@ import uuid
 
 from qdrant_client.http.models import PointStruct
 
-from app.config import INDEX_NAME
-from app.services.embedding_service import get_embedding
+from app.config import INDEX_NAME, INGEST_BATCH_SIZE
+from app.services.embedding_service import get_embeddings_batch
 from app.services.qdrant_service import qdrant_client
 from app.services.text_processor import chunk_text, extract_text_from_path
 
 
 def index_chunks(chunks: list[str], file_path: str) -> None:
-    """Generate embeddings for text chunks and upload them to Qdrant in bulk."""
-    print("Generating embeddings and indexing into Qdrant...")
+    """Generate embeddings for text chunks in batches and upload them to Qdrant in bulk."""
+    print(f"Generating embeddings in batches of {INGEST_BATCH_SIZE} and indexing into Qdrant...")
     points = []
 
-    for i, chunk in enumerate(chunks):
-        vector = get_embedding(chunk)
+    for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE):
+        batch = chunks[batch_start : batch_start + INGEST_BATCH_SIZE]
+        try:
+            vectors = get_embeddings_batch(batch)
+        except Exception as e:
+            print(f"    [WARNING] Embedding failed at batch {batch_start}: {e}. Skipping batch.")
+            continue
 
-        point_id = str(
-            uuid.uuid5(uuid.NAMESPACE_DNS, f"doc_{os.path.basename(file_path)}_{i}")
-        )
-
-        points.append(
-            PointStruct(
-                id=point_id,
-                vector=vector,
-                payload={"combined": chunk, "source_file": os.path.basename(file_path)},
+        for i, (chunk, vector) in enumerate(zip(batch, vectors)):
+            chunk_index = batch_start + i
+            point_id = str(
+                uuid.uuid5(uuid.NAMESPACE_DNS, f"doc_{os.path.basename(file_path)}_{chunk_index}")
             )
-        )
+            points.append(
+                PointStruct(
+                    id=point_id,
+                    vector=vector,
+                    payload={"combined": chunk, "source_file": os.path.basename(file_path)},
+                )
+            )
 
-        if (i + 1) % 5 == 0 or (i + 1) == len(chunks):
-            print(f"    Processed {i + 1}/{len(chunks)} chunks…")
+        processed = min(batch_start + INGEST_BATCH_SIZE, len(chunks))
+        print(f"    Processed {processed}/{len(chunks)} chunks…")
 
     try:
         qdrant_client.upsert(collection_name=INDEX_NAME, points=points)

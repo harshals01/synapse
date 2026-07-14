@@ -4,6 +4,8 @@ INDEX_NAME = os.environ.get("INDEX_NAME", "rag_knowledge_base")
 
 LOW_CONFIDENCE_THRESHOLD = float(os.environ.get("LOW_CONFIDENCE_THRESHOLD", "0.015"))
 MAX_CONTEXT_DOCS = int(os.environ.get("MAX_CONTEXT_DOCS", "20"))
+# Number of prior conversation turns sent to the LLM as chat history.
+CHAT_HISTORY_WINDOW: int = int(os.environ.get("CHAT_HISTORY_WINDOW", "6"))
 
 # ── Hugging Face Serverless Inference — Embeddings ────────────────────────────
 HF_TOKEN = os.environ.get("HF_TOKEN", "")

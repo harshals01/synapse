@@ -7,11 +7,9 @@ from app import config
 
 logger = logging.getLogger(__name__)
 
-# Maximum characters sent per chunk — all-MiniLM-L6-v2 accepts up to ~512 tokens (~2000 chars)
 _MAX_CHARS_PER_CHUNK = 2000
 
 
-# ── Internal helpers ───────────────────────────────────────────────────────────
 
 def _build_headers() -> dict:
     headers: dict = {"Content-Type": "application/json"}
@@ -88,12 +86,13 @@ def get_embedding(text: str) -> list[float]:
         text = text[:_MAX_CHARS_PER_CHUNK]
 
     payload = {"inputs": text, "options": {"wait_for_model": True}}
+    headers = _build_headers()
 
     for attempt in range(config.MAX_EMBED_RETRIES):
         try:
             response = requests.post(
                 config.HF_EMBEDDING_API_URL,
-                headers=_build_headers(),
+                headers=headers,
                 json=payload,
                 timeout=30,
             )
@@ -125,17 +124,15 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     ``_embed_with_partition`` which recursively halves the batch to find
     an acceptable size — avoiding the O(N) serial-call penalty.
     """
-    truncated = [
-        t[:_MAX_CHARS_PER_CHUNK] if len(t) > _MAX_CHARS_PER_CHUNK else t
-        for t in texts
-    ]
+    truncated = [t[:_MAX_CHARS_PER_CHUNK] for t in texts]
     payload = {"inputs": truncated, "options": {"wait_for_model": True}}
+    headers = _build_headers()
 
     for attempt in range(config.MAX_EMBED_RETRIES):
         try:
             response = requests.post(
                 config.HF_EMBEDDING_API_URL,
-                headers=_build_headers(),
+                headers=headers,
                 json=payload,
                 timeout=60,
             )

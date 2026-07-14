@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import require_api_key
+from app import config
 from app.config import LOW_CONFIDENCE_THRESHOLD, MAX_CONTEXT_DOCS
 from app.logger import get_logger
 from app.models.request_models import ChatRequest
@@ -16,14 +17,12 @@ logger = get_logger()
 @router.post("/chat", dependencies=[Depends(require_api_key)])
 def chat(req: ChatRequest):
     try:
-        # Convert Pydantic models to plain dicts for downstream service functions
         messages = [m.model_dump() for m in req.messages]
 
         raw_query = next(
             (m["content"] for m in reversed(messages) if m["role"] == "user"),
             "",
         )
-        # Log query length only — avoid writing user PII to disk
         logger.info(f"Query received ({len(raw_query)} chars)")
 
         user_query = rewrite_query_with_context(messages, logger)
@@ -45,7 +44,6 @@ def chat(req: ChatRequest):
 
         top_hits = sorted_hits[:MAX_CONTEXT_DOCS]
 
-        # Null-safe payload access — skip documents missing the 'combined' field
         context_blocks = [
             f"Document {i + 1}:\n{hit['source'].get('combined', '').replace('<br>', chr(10))}"
             for i, hit in enumerate(top_hits)
@@ -53,10 +51,9 @@ def chat(req: ChatRequest):
         ]
         retrieved_context = "\n\n".join(context_blocks)
 
-        # Build chat history, excluding any empty message stubs
         chat_history = [
             {"role": m["role"], "content": m["content"]}
-            for m in messages[-4:-1]
+            for m in messages[-(config.CHAT_HISTORY_WINDOW + 1):-1]
             if m.get("content", "").strip()
         ]
         chat_history.append({"role": "user", "content": user_query})
@@ -82,7 +79,7 @@ def chat(req: ChatRequest):
         }
 
     except HTTPException:
-        raise  # Re-raise FastAPI HTTP exceptions without wrapping
+        raise
 
     except Exception:
         logger.exception("Unhandled exception in POST /chat")
