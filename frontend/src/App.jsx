@@ -219,32 +219,6 @@ function App() {
           </svg>
           <h1>Synapse</h1>
         </div>
-        <button
-          className={`header-btn ${showUpload ? "" : "btn-upload"}`}
-          onClick={() => {
-            setShowUpload((v) => !v);
-            setUploadStatus(null);
-          }}
-        >
-          {showUpload ? (
-            <>
-              <svg className="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-              </svg>
-              <span>Chat</span>
-            </>
-          ) : (
-            <>
-              <svg className="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <span>Upload PDF</span>
-            </>
-          )}
-        </button>
 
         <div className="header-actions">
           {/* Clear Chat */}
@@ -377,7 +351,7 @@ function App() {
             <input
               id="chat-input"
               type="text"
-              placeholder="Ask anything about your PDF…"
+              placeholder="Ask anything…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
