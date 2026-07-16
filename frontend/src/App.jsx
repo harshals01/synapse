@@ -154,7 +154,7 @@ function App() {
         const updated = [...prev];
         updated[updated.length - 1] = {
           ...updated[updated.length - 1],
-          content: `⚠️ Error: ${detail}`,
+          content: ` Error: ${detail}`,
         };
         return updated;
       });
@@ -268,6 +268,25 @@ function App() {
       {/* UPLOAD PANEL */}
       {showUpload && (
         <div className="upload-panel">
+          {/* Back button */}
+          <button
+            className="upload-back-btn"
+            onClick={() => {
+              setShowUpload(false);
+              setUploadFile(null);
+              setUploadStatus(null);
+              if (fileInputRef.current) fileInputRef.current.value = "";
+            }}
+            title="Back to chat"
+            aria-label="Back to chat"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Back to Chat
+          </button>
+
           <h2>Upload a PDF to the Knowledge Base</h2>
           <p className="upload-hint">
             The document will be chunked, embedded, and indexed into Qdrant so
