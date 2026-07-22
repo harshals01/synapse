@@ -76,3 +76,5 @@ qdrant_storage/
 # ── Uploaded files (temporary ingest artifacts) ───────────────────────────────
 uploads/
 tmp/
+# ── Local Context & Docs ──────────────────────────────────────────────────────
+context.md
