@@ -17,7 +17,10 @@ _FALLBACK_MODELS = [
     "Qwen/Qwen2.5-7B-Instruct:fastest",
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.1-8B-Instruct:fastest",
-    "mistralai/Mistral-7B-Instruct-v0.3",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct:fastest",
+    "Qwen/Qwen2.5-Coder-32B-Instruct",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
 ]
 
 
