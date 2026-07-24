@@ -14,7 +14,9 @@ _HF_LLM_URL = "https://router.huggingface.co/v1/chat/completions"
 
 _FALLBACK_MODELS = [
     "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct:fastest",
     "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct:fastest",
     "mistralai/Mistral-7B-Instruct-v0.3",
 ]
 
@@ -142,8 +144,8 @@ def call_llm(payload: dict, logger) -> str:
                 logger.warning(f"Exception trying model '{model}': {e}")
 
         logger.error(f"All LLM models failed. Last error: {last_error}")
-        return "Error communicating with the language model. Please try again."
+        return f"Error communicating with the language model ({last_error}). Please try again."
 
-    except Exception:
+    except Exception as exc:
         logger.exception("Unhandled exception in call_llm")
-        return "Error communicating with the language model."
+        return f"Error communicating with the language model: {exc}"
