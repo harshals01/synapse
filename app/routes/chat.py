@@ -44,11 +44,22 @@ def chat(req: ChatRequest):
 
         top_hits = sorted_hits[:MAX_CONTEXT_DOCS]
 
-        context_blocks = [
-            f"Document {i + 1}:\n{hit['source'].get('combined', '').replace('<br>', chr(10))}"
-            for i, hit in enumerate(top_hits)
-            if hit.get("source", {}).get("combined")
-        ]
+        MAX_CONTEXT_CHARS = 8000
+        context_blocks = []
+        accumulated_len = 0
+
+        for i, hit in enumerate(top_hits):
+            combined_text = (
+                hit.get("source", {}).get("combined", "").replace("<br>", "\n").strip()
+            )
+            if not combined_text:
+                continue
+            block = f"Document {i + 1}:\n{combined_text}"
+            if accumulated_len + len(block) > MAX_CONTEXT_CHARS and context_blocks:
+                break
+            context_blocks.append(block)
+            accumulated_len += len(block)
+
         retrieved_context = "\n\n".join(context_blocks)
 
         chat_history = [
@@ -58,15 +69,15 @@ def chat(req: ChatRequest):
         ]
         chat_history.append({"role": "user", "content": user_query})
 
+        system_prompt = (
+            "Answer using only the provided context. Do not hallucinate.\n\n"
+            f"Context:\n{retrieved_context}"
+        )
+
         payload = {
             "messages": [
-                {
-                    "role": "system",
-                    "content": "Answer using only the provided context. Do not hallucinate.",
-                },
-                {"role": "system", "content": f"Context:\n{retrieved_context}"},
-            ]
-            + chat_history
+                {"role": "system", "content": system_prompt}
+            ] + chat_history
         }
 
         reply = call_llm(payload, logger)
@@ -74,7 +85,7 @@ def chat(req: ChatRequest):
         return {
             "reply": reply,
             "llm_called": True,
-            "hits_used": len(top_hits),
+            "hits_used": len(context_blocks),
             "max_score": max_score,
         }
 

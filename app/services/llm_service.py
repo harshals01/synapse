@@ -12,6 +12,36 @@ from app import config
 
 _HF_LLM_URL = "https://router.huggingface.co/v1/chat/completions"
 
+_FALLBACK_MODELS = [
+    "Qwen/Qwen2.5-7B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "mistralai/Mistral-7B-Instruct-v0.3",
+]
+
+
+def _normalize_messages(messages: list[dict]) -> list[dict]:
+    """
+    Ensure at most ONE system message exists at the start of the message list.
+    Combines multiple system messages into a single system message to ensure
+    compatibility with OpenAI-style router standards.
+    """
+    system_parts = []
+    other_messages = []
+
+    for msg in messages:
+        if msg.get("role") == "system":
+            content = msg.get("content", "").strip()
+            if content:
+                system_parts.append(content)
+        else:
+            other_messages.append(msg)
+
+    if not system_parts:
+        return other_messages
+
+    combined_system = "\n\n".join(system_parts)
+    return [{"role": "system", "content": combined_system}] + other_messages
+
 
 def _call_with_retry(
     url: str,
@@ -56,7 +86,6 @@ def _call_with_retry(
             time.sleep(wait)
             continue
 
-        # Non-retryable error — return immediately so the caller can log it
         return response
 
     raise RuntimeError(f"LLM API failed after {max_retries} retries.")
@@ -67,36 +96,53 @@ def call_llm(payload: dict, logger) -> str:
     Send a chat completion request to the Hugging Face OpenAI-compatible
     router and return the generated reply string.
 
-    Retries automatically on HTTP 429 (rate limit) and 503 (model cold-start).
-    Returns a human-readable error string on persistent failure so the caller
-    can surface it to the user gracefully.
+    Normalizes system messages, enforces token-friendly structure, and retries
+    with fallback models if the primary model encounters errors.
     """
     try:
         headers: dict = {"Content-Type": "application/json"}
         if config.HF_TOKEN:
             headers["Authorization"] = f"Bearer {config.HF_TOKEN}"
 
-        hf_payload = {
-            "model": config.HF_LLM_MODEL,
-            "messages": payload.get("messages", []),
-            "temperature": 0.3,
-        }
+        messages = _normalize_messages(payload.get("messages", []))
 
-        response = _call_with_retry(_HF_LLM_URL, headers, hf_payload, logger)
+        models_to_try = [config.HF_LLM_MODEL]
+        for fallback in _FALLBACK_MODELS:
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
 
-        if response.status_code != 200:
-            logger.error(
-                f"HF LLM API error: HTTP {response.status_code} — {response.text}"
-            )
-            return "Error communicating with the language model. Please try again."
+        last_error = ""
 
-        data = response.json()
-        reply: str | None = (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content")
-        )
-        return reply or "No response was returned by the language model."
+        for model in models_to_try:
+            hf_payload = {
+                "model": model,
+                "messages": messages,
+                "temperature": 0.3,
+            }
+
+            try:
+                response = _call_with_retry(_HF_LLM_URL, headers, hf_payload, logger)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    reply: str | None = (
+                        data.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content")
+                    )
+                    if reply:
+                        return reply
+
+                last_error = f"HTTP {response.status_code} — {response.text}"
+                logger.warning(
+                    f"HF LLM model '{model}' failed: {last_error}"
+                )
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"Exception trying model '{model}': {e}")
+
+        logger.error(f"All LLM models failed. Last error: {last_error}")
+        return "Error communicating with the language model. Please try again."
 
     except Exception:
         logger.exception("Unhandled exception in call_llm")
