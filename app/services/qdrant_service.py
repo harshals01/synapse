@@ -124,21 +124,37 @@ def keyword_search(
 
 
 def get_latest_source_file(collection_name: str) -> str | None:
-    """Return the source_file name of the most recently ingested document."""
+    """Return the source_file name of the most recently ingested document.
+
+    Only considers points that have a valid non-empty 'ingested_at' timestamp string.
+    If no points have a valid 'ingested_at', returns None so search falls back safely.
+    """
     try:
         results, _ = qdrant_client.scroll(
             collection_name=collection_name,
             limit=10_000,
-            with_payload=["source_file", "ingested_at"],
+            with_payload=True,
             with_vectors=False,
         )
         if not results:
             return None
-        latest = max(
-            results,
-            key=lambda p: p.payload.get("ingested_at", "") if p.payload else "",
-        )
-        return latest.payload.get("source_file") if latest.payload else None
+
+        valid_points = []
+        for p in results:
+            if not p.payload:
+                continue
+            sf = p.payload.get("source_file")
+            ts = p.payload.get("ingested_at")
+            if sf and isinstance(sf, str) and ts and isinstance(ts, str) and ts.strip():
+                valid_points.append((ts, sf))
+
+        if not valid_points:
+            logger.warning("No points with valid 'ingested_at' timestamp found in index.")
+            return None
+
+        # Return the source_file of the newest ingested_at timestamp
+        valid_points.sort(key=lambda x: x[0], reverse=True)
+        return valid_points[0][1]
     except Exception as e:
         logger.error(f"get_latest_source_file failed: {e}")
         return None
@@ -150,22 +166,30 @@ def list_ingested_documents(collection_name: str) -> list[dict]:
         results, _ = qdrant_client.scroll(
             collection_name=collection_name,
             limit=10_000,
-            with_payload=["source_file", "ingested_at"],
+            with_payload=True,
             with_vectors=False,
         )
         doc_map: dict[str, dict] = {}
         for p in results:
             if not p.payload:
                 continue
-            fname = p.payload.get("source_file", "unknown")
-            ts = p.payload.get("ingested_at", "")
+            fname = p.payload.get("source_file")
+            if not fname or not isinstance(fname, str):
+                continue
+            ts = p.payload.get("ingested_at")
+            ts_str = ts if isinstance(ts, str) else ""
+
             if fname not in doc_map:
-                doc_map[fname] = {"source_file": fname, "chunk_count": 0, "ingested_at": ts}
+                doc_map[fname] = {
+                    "source_file": fname,
+                    "chunk_count": 0,
+                    "ingested_at": ts_str,
+                }
             doc_map[fname]["chunk_count"] += 1
-            # Keep the latest timestamp seen for this file
-            if ts > doc_map[fname]["ingested_at"]:
-                doc_map[fname]["ingested_at"] = ts
-        return sorted(doc_map.values(), key=lambda d: d["ingested_at"], reverse=True)
+            if ts_str and ts_str > doc_map[fname]["ingested_at"]:
+                doc_map[fname]["ingested_at"] = ts_str
+
+        return sorted(doc_map.values(), key=lambda d: d["ingested_at"] or "", reverse=True)
     except Exception as e:
         logger.error(f"list_ingested_documents failed: {e}")
         return []

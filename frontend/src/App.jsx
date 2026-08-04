@@ -60,23 +60,16 @@ function App() {
   const [showUpload, setShowUpload] = useState(false);
   const fileInputRef = useRef(null);
 
-  // ── Document scope ────────────────────────────────────────────────────────────
-  // "latest" = only the most recently ingested PDF (default)
-  // "all"    = search across every uploaded PDF
-  // anything else = treated as an exact source_file name
   const [documentFilter, setDocumentFilter] = useState("latest");
   const [documentList, setDocumentList] = useState([]); // [{source_file, chunk_count, ingested_at}]
 
-  // ── Theme Toggle (dark is default experience, light is the alternate) ────────
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem(THEME_KEY);
     if (saved) return saved === "dark";
-    // Default to dark as the primary experience
     return true;
   });
 
   useEffect(() => {
-    // Dark = no attribute (default CSS), Light = data-theme="light"
     if (isDark) {
       delete document.documentElement.dataset.theme;
     } else {
@@ -117,11 +110,14 @@ function App() {
         headers: { ...authHeaders() },
       });
       setDocumentList(res.data.documents || []);
-      // Keep filter on "latest" unless user explicitly changed it
     } catch {
-      // Non-critical; silently ignore
     }
   };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
 
   const handleSearch = async () => {
     if (!query.trim() || loading) return;
