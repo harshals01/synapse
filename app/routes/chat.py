@@ -29,7 +29,7 @@ def chat(req: ChatRequest):
         user_query_cleaned = user_query.lower().strip()
         logger.info(f"Final Query: {user_query_cleaned}")
 
-        vector_hits, keyword_hits = run_search(user_query_cleaned, req.top_k, logger)
+        vector_hits, keyword_hits = run_search(user_query_cleaned, req.top_k, logger, document_filter=req.document_filter)
         logger.info(
             f"Retrieved {len(vector_hits)} vector hits and {len(keyword_hits)} keyword hits."
         )

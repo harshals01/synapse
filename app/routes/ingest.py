@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from functools import partial
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -65,6 +66,7 @@ async def ingest_pdf(file: UploadFile = File(...)):
 
     points: list[PointStruct] = []
     failed_batches: list[dict] = []
+    ingested_at = datetime.now(timezone.utc).isoformat()
 
     for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE):
         batch = chunks[batch_start : batch_start + INGEST_BATCH_SIZE]
@@ -89,7 +91,11 @@ async def ingest_pdf(file: UploadFile = File(...)):
                 PointStruct(
                     id=point_id,
                     vector=vector,
-                    payload={"combined": chunk, "source_file": file.filename},
+                    payload={
+                        "combined": chunk,
+                        "source_file": file.filename,
+                        "ingested_at": ingested_at,
+                    },
                 )
             )
 

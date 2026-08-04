@@ -41,6 +41,18 @@ def ensure_collection_exists(collection_name: str) -> None:
                 lowercase=True,
             ),
         )
+        # Keyword index on source_file for fast per-document filtering
+        qdrant_client.create_payload_index(
+            collection_name=collection_name,
+            field_name="source_file",
+            field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
+        )
+        # Datetime index on ingested_at for latest-document resolution
+        qdrant_client.create_payload_index(
+            collection_name=collection_name,
+            field_name="ingested_at",
+            field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
+        )
         logger.info(f"Collection '{collection_name}' created successfully.")
 
 
@@ -54,14 +66,19 @@ except Exception as _e:
     )
 
 
-def semantic_search(collection_name: str, query_vector: list, top_k: int) -> dict:
+def semantic_search(
+    collection_name: str,
+    query_vector: list,
+    top_k: int,
+    query_filter: qdrant_models.Filter | None = None,
+) -> dict:
     """Return top-K documents ranked by cosine similarity to the query vector."""
     try:
-        # Use the modern query_points API which is supported on all recent qdrant-client versions
         results = qdrant_client.query_points(
             collection_name=collection_name,
             query=query_vector,
             limit=top_k,
+            query_filter=query_filter,
         )
         hits = [
             {"_id": str(p.id), "_score": p.score, "_source": p.payload}
@@ -73,19 +90,27 @@ def semantic_search(collection_name: str, query_vector: list, top_k: int) -> dic
         return {"hits": {"hits": []}}
 
 
-def keyword_search(collection_name: str, query: str) -> dict:
+def keyword_search(
+    collection_name: str,
+    query: str,
+    query_filter: qdrant_models.Filter | None = None,
+) -> dict:
     """Return documents matching the query text on the 'combined' payload field."""
     try:
+        text_condition = qdrant_models.FieldCondition(
+            key="combined",
+            match=qdrant_models.MatchText(text=query),
+        )
+        if query_filter is not None:
+            # Merge the text condition with any existing must-clauses
+            existing_must = list(query_filter.must or [])
+            combined_filter = qdrant_models.Filter(must=existing_must + [text_condition])
+        else:
+            combined_filter = qdrant_models.Filter(must=[text_condition])
+
         results, _ = qdrant_client.scroll(
             collection_name=collection_name,
-            scroll_filter=qdrant_models.Filter(
-                must=[
-                    qdrant_models.FieldCondition(
-                        key="combined",
-                        match=qdrant_models.MatchText(text=query),
-                    )
-                ]
-            ),
+            scroll_filter=combined_filter,
             limit=100,
         )
         hits = [
@@ -96,4 +121,97 @@ def keyword_search(collection_name: str, query: str) -> dict:
     except Exception as e:
         logger.error(f"Keyword search failed: {e}")
         return {"hits": {"hits": []}}
+
+
+def get_latest_source_file(collection_name: str) -> str | None:
+    """Return the source_file name of the most recently ingested document."""
+    try:
+        results, _ = qdrant_client.scroll(
+            collection_name=collection_name,
+            limit=10_000,
+            with_payload=["source_file", "ingested_at"],
+            with_vectors=False,
+        )
+        if not results:
+            return None
+        latest = max(
+            results,
+            key=lambda p: p.payload.get("ingested_at", "") if p.payload else "",
+        )
+        return latest.payload.get("source_file") if latest.payload else None
+    except Exception as e:
+        logger.error(f"get_latest_source_file failed: {e}")
+        return None
+
+
+def list_ingested_documents(collection_name: str) -> list[dict]:
+    """Return a summary list of every distinct document in the collection."""
+    try:
+        results, _ = qdrant_client.scroll(
+            collection_name=collection_name,
+            limit=10_000,
+            with_payload=["source_file", "ingested_at"],
+            with_vectors=False,
+        )
+        doc_map: dict[str, dict] = {}
+        for p in results:
+            if not p.payload:
+                continue
+            fname = p.payload.get("source_file", "unknown")
+            ts = p.payload.get("ingested_at", "")
+            if fname not in doc_map:
+                doc_map[fname] = {"source_file": fname, "chunk_count": 0, "ingested_at": ts}
+            doc_map[fname]["chunk_count"] += 1
+            # Keep the latest timestamp seen for this file
+            if ts > doc_map[fname]["ingested_at"]:
+                doc_map[fname]["ingested_at"] = ts
+        return sorted(doc_map.values(), key=lambda d: d["ingested_at"], reverse=True)
+    except Exception as e:
+        logger.error(f"list_ingested_documents failed: {e}")
+        return []
+
+
+def delete_documents(
+    collection_name: str,
+    file_name: str | None = None,
+    clear_all: bool = False,
+) -> int:
+    """Delete points from the collection.
+
+    Args:
+        collection_name: Target Qdrant collection.
+        file_name: If provided, deletes only points whose source_file matches.
+        clear_all: If True, deletes ALL points in the collection.
+
+    Returns:
+        Number of points deleted (approximated via count difference).
+    """
+    try:
+        before = qdrant_client.count(collection_name=collection_name).count
+        if clear_all:
+            qdrant_client.delete(
+                collection_name=collection_name,
+                points_selector=qdrant_models.FilterSelector(
+                    filter=qdrant_models.Filter(must=[])
+                ),
+            )
+        elif file_name:
+            qdrant_client.delete(
+                collection_name=collection_name,
+                points_selector=qdrant_models.FilterSelector(
+                    filter=qdrant_models.Filter(
+                        must=[
+                            qdrant_models.FieldCondition(
+                                key="source_file",
+                                match=qdrant_models.MatchValue(value=file_name),
+                            )
+                        ]
+                    )
+                ),
+            )
+        after = qdrant_client.count(collection_name=collection_name).count
+        return before - after
+    except Exception as e:
+        logger.error(f"delete_documents failed: {e}")
+        return 0
 

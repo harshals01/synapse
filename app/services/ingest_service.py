@@ -11,6 +11,7 @@ module so CLI and API ingestion produce identical chunk boundaries and overlap.
 import argparse
 import os
 import uuid
+from datetime import datetime, timezone
 
 from qdrant_client.http.models import PointStruct
 
@@ -24,6 +25,7 @@ def index_chunks(chunks: list[str], file_path: str) -> None:
     """Generate embeddings for text chunks in batches and upload them to Qdrant in bulk."""
     print(f"Generating embeddings in batches of {INGEST_BATCH_SIZE} and indexing into Qdrant...")
     points = []
+    ingested_at = datetime.now(timezone.utc).isoformat()
 
     for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE):
         batch = chunks[batch_start : batch_start + INGEST_BATCH_SIZE]
@@ -42,7 +44,11 @@ def index_chunks(chunks: list[str], file_path: str) -> None:
                 PointStruct(
                     id=point_id,
                     vector=vector,
-                    payload={"combined": chunk, "source_file": os.path.basename(file_path)},
+                    payload={
+                        "combined": chunk,
+                        "source_file": os.path.basename(file_path),
+                        "ingested_at": ingested_at,
+                    },
                 )
             )
 

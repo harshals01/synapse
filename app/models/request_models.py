@@ -27,3 +27,12 @@ class ChatRequest(BaseModel):
         le=100,
         description="Maximum number of vector search results to retrieve.",
     )
+    document_filter: str = Field(
+        "latest",
+        description=(
+            "Controls which documents are searched. "
+            "'latest' (default) searches only the most recently ingested document. "
+            "'all' searches across all uploaded documents. "
+            "Any other value is treated as an exact source_file name to filter by."
+        ),
+    )
