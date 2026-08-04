@@ -1,3 +1,4 @@
+import os
 import asyncio
 import uuid
 from datetime import datetime, timezone
@@ -93,7 +94,7 @@ async def ingest_pdf(file: UploadFile = File(...)):
                     vector=vector,
                     payload={
                         "combined": chunk,
-                        "source_file": file.filename,
+                        "source_file": os.path.basename(file.filename or ""),
                         "ingested_at": ingested_at,
                     },
                 )
