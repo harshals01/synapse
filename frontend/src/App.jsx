@@ -60,6 +60,13 @@ function App() {
   const [showUpload, setShowUpload] = useState(false);
   const fileInputRef = useRef(null);
 
+  // ── Document scope ────────────────────────────────────────────────────────────
+  // "latest" = only the most recently ingested PDF (default)
+  // "all"    = search across every uploaded PDF
+  // anything else = treated as an exact source_file name
+  const [documentFilter, setDocumentFilter] = useState("latest");
+  const [documentList, setDocumentList] = useState([]); // [{source_file, chunk_count, ingested_at}]
+
   // ── Theme Toggle (dark is default experience, light is the alternate) ────────
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem(THEME_KEY);
@@ -104,6 +111,18 @@ function App() {
     }
   };
 
+  const fetchDocuments = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/documents`, {
+        headers: { ...authHeaders() },
+      });
+      setDocumentList(res.data.documents || []);
+      // Keep filter on "latest" unless user explicitly changed it
+    } catch {
+      // Non-critical; silently ignore
+    }
+  };
+
   const handleSearch = async () => {
     if (!query.trim() || loading) return;
 
@@ -131,7 +150,7 @@ function App() {
     try {
       const response = await axios.post(
         `${API_BASE}/chat`,
-        { messages: apiMessages },
+        { messages: apiMessages, document_filter: documentFilter },
         { headers: { ...authHeaders() } },
       );
 
@@ -203,6 +222,10 @@ function App() {
       });
       setUploadFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      // Refresh the document list so the dropdown shows the new file
+      await fetchDocuments();
+      // Auto-switch scope to latest after a successful upload
+      setDocumentFilter("latest");
       setTimeout(() => {
         setShowUpload(false);
         setUploadStatus(null);
@@ -240,6 +263,31 @@ function App() {
             </svg>
             <span>Clear Chat</span>
           </button>
+
+          {/* Document Scope Selector */}
+          <div className="doc-scope-wrapper" title="Select which document(s) to query">
+            <svg className="doc-scope-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <select
+              id="doc-scope-select"
+              className="doc-scope-select"
+              value={documentFilter}
+              onChange={(e) => setDocumentFilter(e.target.value)}
+              aria-label="Document search scope"
+            >
+              <option value="latest">Latest Document</option>
+              <option value="all">All Documents</option>
+              {documentList
+                .filter((d) => d.source_file)
+                .map((d) => (
+                  <option key={d.source_file} value={d.source_file}>
+                    {d.source_file}
+                  </option>
+                ))}
+            </select>
+          </div>
 
           {/* Dark / Light mode toggle */}
           <button
