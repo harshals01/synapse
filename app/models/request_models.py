@@ -36,3 +36,10 @@ class ChatRequest(BaseModel):
             "Any other value is treated as an exact source_file name to filter by."
         ),
     )
+    user_id: str = Field(
+        "default_user",
+        description=(
+            "Caller's unique user identifier. Used to scope all Qdrant searches "
+            "so users only see context from their own uploaded documents."
+        ),
+    )

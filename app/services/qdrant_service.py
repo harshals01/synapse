@@ -53,6 +53,12 @@ def ensure_collection_exists(collection_name: str) -> None:
             field_name="ingested_at",
             field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
         )
+        # Keyword index on user_id for multi-tenant isolation
+        qdrant_client.create_payload_index(
+            collection_name=collection_name,
+            field_name="user_id",
+            field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
+        )
         logger.info(f"Collection '{collection_name}' created successfully.")
 
 
@@ -123,15 +129,24 @@ def keyword_search(
         return {"hits": {"hits": []}}
 
 
-def get_latest_source_file(collection_name: str) -> str | None:
-    """Return the source_file name of the most recently ingested document.
+def get_latest_source_file(collection_name: str, user_id: str) -> str | None:
+    """Return the source_file name of the most recently ingested document for a user.
 
-    Only considers points that have a valid non-empty 'ingested_at' timestamp string.
-    If no points have a valid 'ingested_at', returns None so search falls back safely.
+    Only considers points that belong to `user_id` and have a valid
+    non-empty 'ingested_at' timestamp string.
     """
     try:
+        user_filter = qdrant_models.Filter(
+            must=[
+                qdrant_models.FieldCondition(
+                    key="user_id",
+                    match=qdrant_models.MatchValue(value=user_id),
+                )
+            ]
+        )
         results, _ = qdrant_client.scroll(
             collection_name=collection_name,
+            scroll_filter=user_filter,
             limit=10_000,
             with_payload=True,
             with_vectors=False,
@@ -149,10 +164,9 @@ def get_latest_source_file(collection_name: str) -> str | None:
                 valid_points.append((ts, sf))
 
         if not valid_points:
-            logger.warning("No points with valid 'ingested_at' timestamp found in index.")
+            logger.warning(f"No timestamped documents found for user '{user_id}'.")
             return None
 
-        # Return the source_file of the newest ingested_at timestamp
         valid_points.sort(key=lambda x: x[0], reverse=True)
         return valid_points[0][1]
     except Exception as e:
@@ -160,11 +174,20 @@ def get_latest_source_file(collection_name: str) -> str | None:
         return None
 
 
-def list_ingested_documents(collection_name: str) -> list[dict]:
-    """Return a summary list of every distinct document in the collection."""
+def list_ingested_documents(collection_name: str, user_id: str) -> list[dict]:
+    """Return a summary list of every distinct document belonging to `user_id`."""
     try:
+        user_filter = qdrant_models.Filter(
+            must=[
+                qdrant_models.FieldCondition(
+                    key="user_id",
+                    match=qdrant_models.MatchValue(value=user_id),
+                )
+            ]
+        )
         results, _ = qdrant_client.scroll(
             collection_name=collection_name,
+            scroll_filter=user_filter,
             limit=10_000,
             with_payload=True,
             with_vectors=False,
@@ -197,26 +220,35 @@ def list_ingested_documents(collection_name: str) -> list[dict]:
 
 def delete_documents(
     collection_name: str,
+    user_id: str,
     file_name: str | None = None,
     clear_all: bool = False,
 ) -> int:
-    """Delete points from the collection.
+    """Delete points from the collection scoped to `user_id`.
 
     Args:
         collection_name: Target Qdrant collection.
-        file_name: If provided, deletes only points whose source_file matches.
-        clear_all: If True, deletes ALL points in the collection.
+        user_id: Only delete points belonging to this user.
+        file_name: If provided, further restricts to this source_file.
+        clear_all: If True, deletes ALL points belonging to `user_id`.
 
     Returns:
         Number of points deleted (approximated via count difference).
     """
     try:
         before = qdrant_client.count(collection_name=collection_name).count
+
+        user_condition = qdrant_models.FieldCondition(
+            key="user_id",
+            match=qdrant_models.MatchValue(value=user_id),
+        )
+
         if clear_all:
+            # Delete only this user's points
             qdrant_client.delete(
                 collection_name=collection_name,
                 points_selector=qdrant_models.FilterSelector(
-                    filter=qdrant_models.Filter(must=[])
+                    filter=qdrant_models.Filter(must=[user_condition])
                 ),
             )
         elif file_name:
@@ -225,14 +257,16 @@ def delete_documents(
                 points_selector=qdrant_models.FilterSelector(
                     filter=qdrant_models.Filter(
                         must=[
+                            user_condition,
                             qdrant_models.FieldCondition(
                                 key="source_file",
                                 match=qdrant_models.MatchValue(value=file_name),
-                            )
+                            ),
                         ]
                     )
                 ),
             )
+
         after = qdrant_client.count(collection_name=collection_name).count
         return before - after
     except Exception as e:

@@ -7,7 +7,7 @@ from functools import partial
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from qdrant_client.http.models import PointStruct
 
-from app.auth import require_api_key
+from app.auth import require_api_key, get_current_user_id
 from app.config import INDEX_NAME, INGEST_BATCH_SIZE
 from app.logger import get_logger
 from app.services.embedding_service import get_embeddings_batch
@@ -30,7 +30,10 @@ _MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 @router.post("/ingest", dependencies=[Depends(require_api_key)])
-async def ingest_pdf(file: UploadFile = File(...)):
+async def ingest_pdf(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
     """
     Accept a PDF upload, extract text, chunk it with sliding overlap,
     embed via HF Serverless API, and upsert vectors into Qdrant.
@@ -96,6 +99,7 @@ async def ingest_pdf(file: UploadFile = File(...)):
                         "combined": chunk,
                         "source_file": os.path.basename(file.filename or ""),
                         "ingested_at": ingested_at,
+                        "user_id": user_id,
                     },
                 )
             )

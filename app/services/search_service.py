@@ -4,53 +4,71 @@ from app.services.qdrant_service import (
     semantic_search,
     keyword_search,
     get_latest_source_file,
+    qdrant_models,
 )
-from app.services.qdrant_service import qdrant_models
 from app.utils.query_utils import extract_entity
 from app.config import INDEX_NAME
 
 
-def _build_filter(document_filter: str, logger) -> "qdrant_models.Filter | None":
-    """Resolve document_filter to a Qdrant Filter or None (all documents)."""
-    if not document_filter or document_filter == "all":
-        return None
-
-    if document_filter == "latest":
-        source_file = get_latest_source_file(INDEX_NAME)
-        if not source_file:
-            logger.warning("document_filter='latest' but no timestamped document found; searching all.")
-            return None
-        logger.info(f"document_filter='latest' resolved to '{source_file}'")
-        document_filter = source_file
-
-    clean_filename = os.path.basename(document_filter.strip())
-
-    return qdrant_models.Filter(
-        must=[
-            qdrant_models.FieldCondition(
-                key="source_file",
-                match=qdrant_models.MatchValue(value=clean_filename),
-            )
-        ]
+def _user_condition(user_id: str) -> "qdrant_models.FieldCondition":
+    """Return a Qdrant FieldCondition that matches points belonging to user_id."""
+    return qdrant_models.FieldCondition(
+        key="user_id",
+        match=qdrant_models.MatchValue(value=user_id),
     )
 
 
-def run_search(query, top_k, logger, document_filter: str = "latest"):
-    logger.info(f"Running search for query: {query} | scope: {document_filter}")
+def _build_filter(
+    document_filter: str, user_id: str, logger
+) -> "qdrant_models.Filter":
+    """Resolve document_filter into a Qdrant Filter that always includes the user_id condition.
+
+    The user_id condition is mandatory — it is always injected regardless of scope.
+    """
+    must = [_user_condition(user_id)]
+
+    if not document_filter or document_filter == "all":
+        # Search across all of this user's documents
+        return qdrant_models.Filter(must=must)
+
+    if document_filter == "latest":
+        source_file = get_latest_source_file(INDEX_NAME, user_id=user_id)
+        if not source_file:
+            logger.warning(
+                f"document_filter='latest' but no timestamped document found for user '{user_id}'; "
+                "searching all of user's documents."
+            )
+            return qdrant_models.Filter(must=must)
+        logger.info(f"document_filter='latest' resolved to '{source_file}' for user '{user_id}'")
+        document_filter = source_file
+
+    clean_filename = os.path.basename(document_filter.strip())
+    must.append(
+        qdrant_models.FieldCondition(
+            key="source_file",
+            match=qdrant_models.MatchValue(value=clean_filename),
+        )
+    )
+    return qdrant_models.Filter(must=must)
+
+
+def run_search(query, top_k, logger, document_filter: str = "latest", user_id: str = "default_user"):
+    logger.info(f"Running search | scope: {document_filter} | user: {user_id}")
 
     query_vector = get_embedding(query)
-    qdrant_filter = _build_filter(document_filter, logger)
+    qdrant_filter = _build_filter(document_filter, user_id, logger)
 
     vector_response = semantic_search(INDEX_NAME, query_vector, top_k, query_filter=qdrant_filter)
     vector_hits = vector_response["hits"]["hits"]
 
-    # Fallback: If scoped search returned 0 hits but a filter was applied, search across ALL documents
-    if not vector_hits and qdrant_filter is not None:
+    # Fallback: if a specific file filter returned 0 hits, retry with user-scoped "all" filter
+    if not vector_hits and document_filter not in ("all", "latest"):
         logger.warning(
-            f"Scoped search with filter '{document_filter}' returned 0 vector hits. "
-            "Retrying search across ALL documents as fallback."
+            f"Scoped search for '{document_filter}' returned 0 vector hits. "
+            "Retrying with all of user's documents as fallback."
         )
-        vector_response = semantic_search(INDEX_NAME, query_vector, top_k, query_filter=None)
+        fallback_filter = _build_filter("all", user_id, logger)
+        vector_response = semantic_search(INDEX_NAME, query_vector, top_k, query_filter=fallback_filter)
         vector_hits = vector_response["hits"]["hits"]
 
     keyword_hits = []
@@ -58,9 +76,6 @@ def run_search(query, top_k, logger, document_filter: str = "latest"):
         logger.info("Keyword search enabled")
         keyword_response = keyword_search(INDEX_NAME, query, query_filter=qdrant_filter)
         keyword_hits = keyword_response["hits"]["hits"]
-        if not keyword_hits and qdrant_filter is not None:
-            keyword_response = keyword_search(INDEX_NAME, query, query_filter=None)
-            keyword_hits = keyword_response["hits"]["hits"]
     else:
         logger.info("Keyword search skipped")
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.auth import require_api_key
+from app.auth import require_api_key, get_current_user_id
 from app.config import INDEX_NAME
 from app.logger import get_logger
 from app.services.qdrant_service import (
@@ -14,11 +14,11 @@ logger = get_logger()
 
 
 @router.get("/documents", dependencies=[Depends(require_api_key)])
-def get_documents():
-    """List all documents currently indexed in Qdrant, ordered by most recently ingested first."""
+def get_documents(user_id: str = Depends(get_current_user_id)):
+    """List documents indexed by the calling user, ordered by most recently ingested first."""
     try:
-        docs = list_ingested_documents(INDEX_NAME)
-        latest = get_latest_source_file(INDEX_NAME)
+        docs = list_ingested_documents(INDEX_NAME, user_id=user_id)
+        latest = get_latest_source_file(INDEX_NAME, user_id=user_id)
         return {
             "total_documents": len(docs),
             "latest_document": latest,
@@ -34,17 +34,18 @@ def get_documents():
 
 @router.delete("/documents", dependencies=[Depends(require_api_key)])
 def remove_documents(
+    user_id: str = Depends(get_current_user_id),
     file_name: str | None = Query(
         None, description="Delete only chunks belonging to this filename."
     ),
     clear_all: bool = Query(
-        False, description="If true, deletes ALL points in the index."
+        False, description="If true, deletes ALL of the calling user's points in the index."
     ),
 ):
-    """Delete one document's vectors or wipe the entire index.
+    """Delete one of the calling user's documents or wipe all of their indexed data.
 
     - ``?file_name=report.pdf``  removes only that document's chunks.
-    - ``?clear_all=true``        removes all points from the collection.
+    - ``?clear_all=true``        removes all points belonging to the calling user.
     """
     if not file_name and not clear_all:
         raise HTTPException(
@@ -53,7 +54,7 @@ def remove_documents(
         )
     try:
         deleted = delete_documents(
-            INDEX_NAME, file_name=file_name, clear_all=clear_all
+            INDEX_NAME, user_id=user_id, file_name=file_name, clear_all=clear_all
         )
         return {
             "status": "success",

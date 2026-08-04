@@ -5,7 +5,23 @@ import "./App.css";
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const API_KEY = import.meta.env.VITE_API_KEY || "";
-const authHeaders = () => (API_KEY ? { "X-API-Key": API_KEY } : {});
+
+// Persistent per-browser user identity — generated once and stored in localStorage.
+const USER_ID_KEY = "synapse_user_id";
+const getUserId = () => {
+  let uid = localStorage.getItem(USER_ID_KEY);
+  if (!uid) {
+    uid = crypto.randomUUID();
+    localStorage.setItem(USER_ID_KEY, uid);
+  }
+  return uid;
+};
+const USER_ID = getUserId();
+
+const authHeaders = () => ({
+  ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+  "X-User-ID": USER_ID,
+});
 
 const STORAGE_KEY = "chat_context";
 
@@ -146,7 +162,7 @@ function App() {
     try {
       const response = await axios.post(
         `${API_BASE}/chat`,
-        { messages: apiMessages, document_filter: documentFilter },
+        { messages: apiMessages, document_filter: documentFilter, user_id: USER_ID },
         { headers: { ...authHeaders() } },
       );
 
