@@ -54,6 +54,23 @@ def _parse_single_embedding(data: object) -> list[float]:
     raise ValueError(f"Unexpected embedding response format: {type(data)}")
 
 
+def _parse_batch_embeddings(data: object) -> list[list[float]]:
+    """Extract a list of 384-dim vectors from a HF API batch response."""
+    if isinstance(data, list):
+        results = []
+        for item in data:
+            if isinstance(item, list):
+                if item and isinstance(item[0], list):
+                    results.append(item[0])
+                else:
+                    results.append(item)
+            else:
+                raise ValueError(f"Unexpected item format in batch embedding: {type(item)}")
+        return results
+    raise ValueError(f"Unexpected batch embedding response format: {type(data)}")
+
+
+
 def _embed_with_partition(texts: list[str]) -> list[list[float]]:
     """
     Recursively partition the text list into halves when a batch request
@@ -147,7 +164,7 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
             continue
 
         if response.status_code == 200:
-            return response.json()
+            return _parse_batch_embeddings(response.json())
 
         if response.status_code == 413:
             logger.warning(

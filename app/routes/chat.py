@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.auth import require_api_key
+from app.auth import require_api_key, get_current_user_id
 from app import config
 from app.config import LOW_CONFIDENCE_THRESHOLD, MAX_CONTEXT_DOCS
 from app.logger import get_logger
@@ -15,15 +15,20 @@ logger = get_logger()
 
 
 @router.post("/chat", dependencies=[Depends(require_api_key)])
-def chat(req: ChatRequest):
+def chat(
+    req: ChatRequest,
+    header_user_id: str = Depends(get_current_user_id),
+):
     try:
+        effective_user_id = req.user_id if (req.user_id and req.user_id != "default_user") else header_user_id
+
         messages = [m.model_dump() for m in req.messages]
 
         raw_query = next(
             (m["content"] for m in reversed(messages) if m["role"] == "user"),
             "",
         )
-        logger.info(f"Query received ({len(raw_query)} chars)")
+        logger.info(f"Query received ({len(raw_query)} chars) for user '{effective_user_id}'")
 
         user_query = rewrite_query_with_context(messages, logger)
         user_query_cleaned = user_query.lower().strip()
@@ -32,7 +37,7 @@ def chat(req: ChatRequest):
         vector_hits, keyword_hits = run_search(
             user_query_cleaned, req.top_k, logger,
             document_filter=req.document_filter,
-            user_id=req.user_id,
+            user_id=effective_user_id,
         )
         logger.info(
             f"Retrieved {len(vector_hits)} vector hits and {len(keyword_hits)} keyword hits."

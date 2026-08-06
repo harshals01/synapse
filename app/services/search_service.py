@@ -61,8 +61,8 @@ def run_search(query, top_k, logger, document_filter: str = "latest", user_id: s
     vector_response = semantic_search(INDEX_NAME, query_vector, top_k, query_filter=qdrant_filter)
     vector_hits = vector_response["hits"]["hits"]
 
-    # Fallback: if a specific file filter returned 0 hits, retry with user-scoped "all" filter
-    if not vector_hits and document_filter not in ("all", "latest"):
+    # Fallback 1: if scoped search returned 0 hits, retry with all user's documents
+    if not vector_hits and document_filter != "all":
         logger.warning(
             f"Scoped search for '{document_filter}' returned 0 vector hits. "
             "Retrying with all of user's documents as fallback."
@@ -71,11 +71,25 @@ def run_search(query, top_k, logger, document_filter: str = "latest", user_id: s
         vector_response = semantic_search(INDEX_NAME, query_vector, top_k, query_filter=fallback_filter)
         vector_hits = vector_response["hits"]["hits"]
 
+    # Fallback 2: if still 0 hits and user_id is not 'default_user', retry searching 'default_user' scope
+    if not vector_hits and user_id != "default_user":
+        logger.warning(
+            f"Search for user '{user_id}' returned 0 vector hits. "
+            "Retrying with 'default_user' scope as fallback."
+        )
+        fallback_filter = _build_filter("all", "default_user", logger)
+        vector_response = semantic_search(INDEX_NAME, query_vector, top_k, query_filter=fallback_filter)
+        vector_hits = vector_response["hits"]["hits"]
+
     keyword_hits = []
     if extract_entity(query):
         logger.info("Keyword search enabled")
         keyword_response = keyword_search(INDEX_NAME, query, query_filter=qdrant_filter)
         keyword_hits = keyword_response["hits"]["hits"]
+        if not keyword_hits and user_id != "default_user":
+            fallback_filter = _build_filter("all", "default_user", logger)
+            keyword_response = keyword_search(INDEX_NAME, query, query_filter=fallback_filter)
+            keyword_hits = keyword_response["hits"]["hits"]
     else:
         logger.info("Keyword search skipped")
 
