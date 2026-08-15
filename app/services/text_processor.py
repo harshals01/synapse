@@ -1,16 +1,8 @@
-"""
-Shared PDF text extraction and overlapping chunk utilities.
-
-Both the HTTP ingest route (app/routes/ingest.py) and the CLI ingestion
-script (app/services/ingest_service.py) import from this module to guarantee
-identical preprocessing behaviour regardless of ingestion pathway.
-"""
 import io
 
 from pypdf import PdfReader
 
 
-# ── Text Extraction ───────────────────────────────────────────────────────────
 
 def extract_text_from_bytes(raw_bytes: bytes) -> str:
     """
@@ -32,7 +24,6 @@ def extract_text_from_path(pdf_path: str) -> str:
         return extract_text_from_bytes(fh.read())
 
 
-# ── Text Chunking ─────────────────────────────────────────────────────────────
 
 def chunk_text(
     text: str,
@@ -94,7 +85,6 @@ def chunk_text(
             continue
 
         if len(para) > chunk_size:
-            # Oversized paragraph → split on sentence boundaries
             sentences = para.replace(". ", ".\n").split("\n")
 
             for sentence in sentences:

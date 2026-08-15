@@ -88,7 +88,6 @@ def _embed_with_partition(texts: list[str]) -> list[list[float]]:
     return left + right
 
 
-# ── Public API ─────────────────────────────────────────────────────────────────
 
 def get_embedding(text: str) -> list[float]:
     """
