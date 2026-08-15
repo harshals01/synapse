@@ -32,7 +32,6 @@ async def require_api_key(
     Passes silently when ``API_ACCESS_KEY`` is empty (dev mode).
     """
     if not config.API_ACCESS_KEY:
-        # Auth disabled — safe for local development
         return
 
     if api_key != config.API_ACCESS_KEY:
