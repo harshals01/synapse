@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 INDEX_NAME = os.environ.get("INDEX_NAME", "rag_knowledge_base")
 

@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 
-load_dotenv(override=True)  # Load .env before any config or service module is imported
+load_dotenv(override=True)  
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,9 +12,6 @@ from app.routes.ingest import router as ingest_router
 
 app = FastAPI(title="Hybrid Conversational RAG API")
 
-# ── Middleware (must be registered BEFORE routers in FastAPI/Starlette) ────────
-# Origins are loaded from ALLOWED_ORIGINS env var (comma-separated).
-# Defaults to Vite dev server addresses when the variable is not configured.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,

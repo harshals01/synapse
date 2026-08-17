@@ -18,7 +18,7 @@ logger.info(f"Qdrant client initialized — URL: {config.QDRANT_URL}")
 
 
 def ensure_collection_exists(collection_name: str) -> None:
-    """Create the Qdrant collection if it does not already exist."""
+    """Create the Qdrant collection and payload indexes if they do not already exist."""
     try:
         qdrant_client.get_collection(collection_name)
         logger.info(f"Collection '{collection_name}' is ready.")
@@ -31,35 +31,24 @@ def ensure_collection_exists(collection_name: str) -> None:
                 distance=qdrant_models.Distance.COSINE,
             ),
         )
-        # Full-text index on 'combined' field enables keyword search via scroll filter
-        qdrant_client.create_payload_index(
-            collection_name=collection_name,
-            field_name="combined",
-            field_schema=qdrant_models.TextIndexParams(
-                type="text",
-                tokenizer=qdrant_models.TokenizerType.WORD,
-                lowercase=True,
-            ),
-        )
-        # Keyword index on source_file for fast per-document filtering
-        qdrant_client.create_payload_index(
-            collection_name=collection_name,
-            field_name="source_file",
-            field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
-        )
-        # Datetime index on ingested_at for latest-document resolution
-        qdrant_client.create_payload_index(
-            collection_name=collection_name,
-            field_name="ingested_at",
-            field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
-        )
-        # Keyword index on user_id for multi-tenant isolation
-        qdrant_client.create_payload_index(
-            collection_name=collection_name,
-            field_name="user_id",
-            field_schema=qdrant_models.KeywordIndexParams(type="keyword"),
-        )
         logger.info(f"Collection '{collection_name}' created successfully.")
+
+    # Ensure all required payload indexes exist on new or existing collections
+    payload_indexes = [
+        ("combined", qdrant_models.TextIndexParams(type="text", tokenizer=qdrant_models.TokenizerType.WORD, lowercase=True)),
+        ("source_file", qdrant_models.KeywordIndexParams(type="keyword")),
+        ("ingested_at", qdrant_models.KeywordIndexParams(type="keyword")),
+        ("user_id", qdrant_models.KeywordIndexParams(type="keyword")),
+    ]
+    for field_name, schema in payload_indexes:
+        try:
+            qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=schema,
+            )
+        except Exception:
+            pass
 
 
 # Attempt collection setup at startup; log a warning on failure instead of crashing.
