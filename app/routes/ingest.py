@@ -72,17 +72,29 @@ async def ingest_pdf(
     failed_batches: list[dict] = []
     ingested_at = datetime.now(timezone.utc).isoformat()
 
-    for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE):
-        batch = chunks[batch_start : batch_start + INGEST_BATCH_SIZE]
-        try:
-            vectors: list[list[float]] = await loop.run_in_executor(
-                None, partial(get_embeddings_batch, batch)
-            )
-        except Exception as e:
-            logger.error(f"[INGEST] Embedding failed at batch index {batch_start}: {e}")
-            failed_batches.append({"batch_start": batch_start, "error": str(e)})
-            continue
+    batches = [
+        (batch_start, chunks[batch_start : batch_start + INGEST_BATCH_SIZE])
+        for batch_start in range(0, len(chunks), INGEST_BATCH_SIZE)
+    ]
+    sem = asyncio.Semaphore(4)
 
+    async def process_batch(batch_start: int, batch: list[str]):
+        async with sem:
+            try:
+                vectors: list[list[float]] = await loop.run_in_executor(
+                    None, partial(get_embeddings_batch, batch)
+                )
+                return (batch_start, batch, vectors, None)
+            except Exception as e:
+                logger.error(f"[INGEST] Embedding failed at batch index {batch_start}: {e}")
+                return (batch_start, batch, None, str(e))
+
+    results = await asyncio.gather(*(process_batch(b_start, b_chunks) for b_start, b_chunks in batches))
+
+    for batch_start, batch, vectors, error in results:
+        if error or not vectors:
+            failed_batches.append({"batch_start": batch_start, "error": error or "Empty vectors"})
+            continue
         for i, (chunk, vector) in enumerate(zip(batch, vectors)):
             chunk_index = batch_start + i
             point_id = str(

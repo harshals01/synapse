@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 _MAX_CHARS_PER_CHUNK = 2000
 
 
-
 def _build_headers() -> dict:
     headers: dict = {"Content-Type": "application/json"}
     if config.HF_TOKEN:
@@ -49,8 +48,11 @@ def _parse_single_embedding(data: object) -> list[float]:
     """Extract a single 384-dim vector from a HF API response."""
     if isinstance(data, list):
         if data and isinstance(data[0], list):
-            return data[0]
-        return data  # type: ignore[return-value]
+            inner = data[0]
+            if inner and isinstance(inner[0], list):
+                return inner[0]
+            return inner
+        return data  
     raise ValueError(f"Unexpected embedding response format: {type(data)}")
 
 

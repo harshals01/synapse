@@ -48,6 +48,7 @@ def index_chunks(chunks: list[str], file_path: str) -> None:
                         "combined": chunk,
                         "source_file": os.path.basename(file_path),
                         "ingested_at": ingested_at,
+                        "user_id": "default_user",
                     },
                 )
             )
