@@ -22,7 +22,7 @@ QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
 
 
-INGEST_BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "5"))
+INGEST_BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "32"))
 MAX_EMBED_RETRIES = int(os.environ.get("MAX_EMBED_RETRIES", "3"))
 
 

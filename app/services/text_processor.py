@@ -27,8 +27,8 @@ def extract_text_from_path(pdf_path: str) -> str:
 
 def chunk_text(
     text: str,
-    chunk_size: int = 700,
-    chunk_overlap: int = 70,
+    chunk_size: int = 1500,
+    chunk_overlap: int = 150,
 ) -> list[str]:
     """
     Split document text into overlapping chunks using a paragraph-sentence
@@ -48,9 +48,9 @@ def chunk_text(
     Parameters
     ----------
     text:         Full document text string.
-    chunk_size:   Target maximum character length per chunk (default 700).
+    chunk_size:   Target maximum character length per chunk (default 1500).
     chunk_overlap: Number of characters from the end of the previous chunk
-                   carried into the start of the next chunk (default 70).
+                   carried into the start of the next chunk (default 150).
 
     Returns
     -------

@@ -82,4 +82,5 @@ testpdf.pdf
 # ── Local Context & Docs ──────────────────────────────────────────────────────
 context.md
 CONTEXT.md
+implementation.md
 
