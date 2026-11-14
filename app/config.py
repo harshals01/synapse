@@ -11,14 +11,8 @@ MAX_CONTEXT_DOCS = int(os.environ.get("MAX_CONTEXT_DOCS", "20"))
 CHAT_HISTORY_WINDOW: int = int(os.environ.get("CHAT_HISTORY_WINDOW", "6"))
 
 
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
-HF_EMBEDDING_API_URL = os.environ.get(
-    "HF_EMBEDDING_API_URL",
-    "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction",
-)
-
-
-HF_LLM_MODEL = os.environ.get("HF_LLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL: str = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
 
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
@@ -26,7 +20,6 @@ QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY", "")
 
 
 INGEST_BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "32"))
-MAX_EMBED_RETRIES = int(os.environ.get("MAX_EMBED_RETRIES", "3"))
 
 
 API_ACCESS_KEY: str = os.environ.get("API_ACCESS_KEY", "")

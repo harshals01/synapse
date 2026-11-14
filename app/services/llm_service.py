@@ -1,8 +1,6 @@
 """
-LLM service — Hugging Face OpenAI-compatible chat completions router.
-
-The application uses the Hugging Face serverless inference router exclusively.
-Model is configured via the HF_LLM_MODEL environment variable.
+LLM service — Groq OpenAI-compatible chat completions API.
+Model is configured via the GROQ_MODEL environment variable.
 """
 import time
 
@@ -10,18 +8,7 @@ import requests
 
 from app import config
 
-_HF_LLM_URL = "https://router.huggingface.co/v1/chat/completions"
-
-_FALLBACK_MODELS = [
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct:fastest",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.1-8B-Instruct:fastest",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct:fastest",
-    "Qwen/Qwen2.5-Coder-32B-Instruct",
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-]
+_GROQ_LLM_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 def _normalize_messages(messages: list[dict]) -> list[dict]:
@@ -56,16 +43,16 @@ def _call_with_retry(
     max_retries: int = 3,
 ) -> requests.Response:
     """
-    POST to ``url`` with exponential backoff on HTTP 429 (rate limit) and
-    503 (model loading). Raises ``RuntimeError`` after all retries are exhausted.
+    POST to ``url`` with exponential backoff on HTTP 429 (rate limit).
+    Raises ``RuntimeError`` after all retries are exhausted.
     """
     for attempt in range(max_retries):
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=60)
         except requests.exceptions.Timeout:
-            logger.warning(f"LLM API timeout (attempt {attempt + 1}/{max_retries}).")
+            logger.warning(f"Groq API timeout (attempt {attempt + 1}/{max_retries}).")
             if attempt == max_retries - 1:
-                raise TimeoutError(f"LLM API timed out after {max_retries} attempts.")
+                raise TimeoutError(f"Groq API timed out after {max_retries} attempts.")
             time.sleep(2 ** attempt)
             continue
 
@@ -75,17 +62,7 @@ def _call_with_retry(
         if response.status_code == 429:
             wait = int(response.headers.get("Retry-After", 2 ** attempt))
             logger.warning(
-                f"LLM API rate limited (429). Retrying in {wait}s "
-                f"(attempt {attempt + 1}/{max_retries})."
-            )
-            time.sleep(wait)
-            continue
-
-        if response.status_code == 503:
-            body = response.json() if response.content else {}
-            wait = min(float(body.get("estimated_time", 20)), 30.0)
-            logger.warning(
-                f"LLM model loading (503). Waiting {wait:.0f}s "
+                f"Groq API rate limited (429). Retrying in {wait}s "
                 f"(attempt {attempt + 1}/{max_retries})."
             )
             time.sleep(wait)
@@ -93,62 +70,44 @@ def _call_with_retry(
 
         return response
 
-    raise RuntimeError(f"LLM API failed after {max_retries} retries.")
+    raise RuntimeError(f"Groq API failed after {max_retries} retries.")
 
 
 def call_llm(payload: dict, logger) -> str:
     """
-    Send a chat completion request to the Hugging Face OpenAI-compatible
-    router and return the generated reply string.
-
-    Normalizes system messages, enforces token-friendly structure, and retries
-    with fallback models if the primary model encounters errors.
+    Send a chat completion request to the Groq OpenAI-compatible API
+    and return the generated reply string.
     """
-    try:
-        headers: dict = {"Content-Type": "application/json"}
-        if config.HF_TOKEN:
-            headers["Authorization"] = f"Bearer {config.HF_TOKEN}"
+    if not config.GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY is not configured in the environment.")
 
-        messages = _normalize_messages(payload.get("messages", []))
+    headers: dict = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+    }
 
-        models_to_try = [config.HF_LLM_MODEL]
-        for fallback in _FALLBACK_MODELS:
-            if fallback not in models_to_try:
-                models_to_try.append(fallback)
+    messages = _normalize_messages(payload.get("messages", []))
+    groq_payload = {
+        "model": config.GROQ_MODEL,
+        "messages": messages,
+        "temperature": 0.3,
+    }
 
-        last_error = ""
+    response = _call_with_retry(_GROQ_LLM_URL, headers, groq_payload, logger)
 
-        for model in models_to_try:
-            hf_payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": 0.3,
-            }
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Groq API error HTTP {response.status_code}: {response.text}"
+        )
 
-            try:
-                response = _call_with_retry(_HF_LLM_URL, headers, hf_payload, logger)
+    data = response.json()
+    reply: str | None = (
+        data.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content")
+    )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    reply: str | None = (
-                        data.get("choices", [{}])[0]
-                        .get("message", {})
-                        .get("content")
-                    )
-                    if reply:
-                        return reply
+    if not reply:
+        raise ValueError("Groq returned an empty response.")
 
-                last_error = f"HTTP {response.status_code} — {response.text}"
-                logger.warning(
-                    f"HF LLM model '{model}' failed: {last_error}"
-                )
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"Exception trying model '{model}': {e}")
-
-        logger.error(f"All LLM models failed. Last error: {last_error}")
-        return f"Error communicating with the language model ({last_error}). Please try again."
-
-    except Exception as exc:
-        logger.exception("Unhandled exception in call_llm")
-        return f"Error communicating with the language model: {exc}"
+    return reply

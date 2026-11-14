@@ -70,7 +70,6 @@ def chat(
             chunk_index = source.get("chunk_index")
             score = hit.get("score", 0.0)
 
-            # Build the labeled context block for the LLM
             page_label = f", Page {page_number}" if page_number else ""
             block = (
                 f"[Source {citation_id}] (File: {source_file}{page_label}):\n"
@@ -82,7 +81,6 @@ def chat(
             context_blocks.append(block)
             accumulated_len += len(block)
 
-            # Build the citation object (snippet = first 300 chars)
             snippet = combined_text[:300].rstrip() + ("…" if len(combined_text) > 300 else "")
             citations.append(Citation(
                 id=citation_id,
