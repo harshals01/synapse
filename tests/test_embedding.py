@@ -1,7 +1,3 @@
-"""
-Smoke tests for app/services/embedding_service.py.
-Uses a mocked SentenceTransformer — no model download required.
-"""
 import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch
@@ -9,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import app.services.embedding_service as svc
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 VECTOR_384 = [0.1] * 384
 NP_VECTOR_384 = np.array(VECTOR_384, dtype=np.float32)
@@ -29,7 +24,6 @@ def _mock_model(single_vector=NP_VECTOR_384, batch_vectors=NP_BATCH_384) -> Magi
     return mock
 
 
-# ── Single embedding tests ─────────────────────────────────────────────────────
 
 class TestGetEmbedding:
     def test_returns_384_dim_vector(self):
@@ -55,7 +49,6 @@ class TestGetEmbedding:
         mock.encode.assert_called_once_with("hello", normalize_embeddings=True)
 
 
-# ── Batch embedding tests ──────────────────────────────────────────────────────
 
 class TestGetEmbeddingsBatch:
     def test_returns_one_vector_per_input(self):
@@ -82,12 +75,11 @@ class TestGetEmbeddingsBatch:
         mock.encode.assert_called_once_with(texts, batch_size=32, normalize_embeddings=True)
 
 
-# ── Singleton model loading ────────────────────────────────────────────────────
 
 class TestGetModel:
     def test_model_loaded_only_once(self):
         """get_model() must return the same instance on repeated calls."""
-        svc._model = None  # reset singleton for this test
+        svc._model = None  
         with patch(
             "app.services.embedding_service.SentenceTransformer",
             return_value=_mock_model(),
@@ -95,4 +87,4 @@ class TestGetModel:
             svc.get_model()
             svc.get_model()
         mock_cls.assert_called_once()
-        svc._model = None  # clean up after test
+        svc._model = None  
