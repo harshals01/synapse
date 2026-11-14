@@ -155,7 +155,7 @@ const CitationsAccordion = forwardRef(function CitationsAccordion({ citations },
               <div className="citation-card-header">
                 <span className="citation-index">[{c.id}]</span>
                 <span className="citation-filename">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: 4}}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}>
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
@@ -165,7 +165,7 @@ const CitationsAccordion = forwardRef(function CitationsAccordion({ citations },
                   <span className="citation-page">Page {c.page_number}</span>
                 )}
                 <span className="citation-score" title="Relevance score">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{marginRight: 3}}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: 3 }}>
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
                   {(c.score * 1000).toFixed(1)}
@@ -401,9 +401,7 @@ function App() {
       });
       setUploadFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      // Refresh the document list so the dropdown shows the new file
       await fetchDocuments();
-      // Auto-switch scope to latest after a successful upload
       setDocumentFilter("latest");
       setTimeout(() => {
         setShowUpload(false);
