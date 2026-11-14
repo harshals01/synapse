@@ -1,137 +1,98 @@
 """
 Smoke tests for app/services/embedding_service.py.
-All external HTTP calls are mocked — no real API key required.
+Uses a mocked SentenceTransformer — no model download required.
 """
-import time
-from unittest.mock import MagicMock, patch
-
+import numpy as np
 import pytest
+from unittest.mock import MagicMock, patch
 
 import app.services.embedding_service as svc
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _mock_ok(vectors: list) -> MagicMock:
-    """Return a mock requests.Response with status 200 and the given JSON body."""
-    m = MagicMock()
-    m.status_code = 200
-    m.json.return_value = vectors
-    return m
-
-
-def _mock_error(status: int, body: dict | str = "", headers: dict | None = None) -> MagicMock:
-    m = MagicMock()
-    m.status_code = status
-    m.text = str(body)
-    m.headers = headers or {}
-    m.json.return_value = body if isinstance(body, dict) else {}
-    return m
-
-
 VECTOR_384 = [0.1] * 384
+NP_VECTOR_384 = np.array(VECTOR_384, dtype=np.float32)
+NP_BATCH_384 = np.array([VECTOR_384, VECTOR_384, VECTOR_384], dtype=np.float32)
+
+
+def _mock_model(single_vector=NP_VECTOR_384, batch_vectors=NP_BATCH_384) -> MagicMock:
+    """Return a mock SentenceTransformer whose encode() returns controlled numpy arrays."""
+    mock = MagicMock()
+
+    def _encode(text_or_texts, batch_size=32, normalize_embeddings=True):
+        if isinstance(text_or_texts, list):
+            return np.array([single_vector] * len(text_or_texts), dtype=np.float32)
+        return single_vector
+
+    mock.encode.side_effect = _encode
+    return mock
 
 
 # ── Single embedding tests ─────────────────────────────────────────────────────
 
 class TestGetEmbedding:
     def test_returns_384_dim_vector(self):
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=_mock_ok([VECTOR_384])):
+        with patch("app.services.embedding_service.get_model", return_value=_mock_model()):
             result = svc.get_embedding("What is Kubernetes?")
         assert isinstance(result, list)
         assert len(result) == 384
 
-    def test_nested_list_response_unwrapped(self):
-        """HF API can return [[vec]] — the outer list must be unwrapped."""
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=_mock_ok([[VECTOR_384]])):
+    def test_returns_floats(self):
+        with patch("app.services.embedding_service.get_model", return_value=_mock_model()):
             result = svc.get_embedding("test")
+        assert all(isinstance(v, float) for v in result)
+
+    def test_empty_string_returns_384_dim_vector(self):
+        with patch("app.services.embedding_service.get_model", return_value=_mock_model()):
+            result = svc.get_embedding("")
         assert len(result) == 384
 
-    def test_oversized_chunk_is_truncated_before_sending(self):
-        long_text = "a" * 3000
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=_mock_ok([VECTOR_384])) as mock_post:
-            svc.get_embedding(long_text)
-        sent = mock_post.call_args.kwargs["json"]["inputs"]
-        assert len(sent) == svc._MAX_CHARS_PER_CHUNK
-
-    def test_retries_on_429_then_succeeds(self):
-        rate_limited = _mock_error(429, headers={"Retry-After": "0"})
-        success = _mock_ok([VECTOR_384])
-        with patch("app.services.embedding_service.requests.post",
-                   side_effect=[rate_limited, success]):
-            with patch("app.services.embedding_service.time.sleep"):
-                result = svc.get_embedding("test")
-        assert len(result) == 384
-
-    def test_retries_on_503_then_succeeds(self):
-        cold_start = _mock_error(503, body={"estimated_time": 0})
-        success = _mock_ok([VECTOR_384])
-        with patch("app.services.embedding_service.requests.post",
-                   side_effect=[cold_start, success]):
-            with patch("app.services.embedding_service.time.sleep"):
-                result = svc.get_embedding("test")
-        assert len(result) == 384
-
-    def test_raises_runtime_error_after_max_retries_exhausted(self):
-        rate_limited = _mock_error(429, headers={"Retry-After": "0"})
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=rate_limited):
-            with patch("app.services.embedding_service.time.sleep"):
-                with pytest.raises(RuntimeError, match="failed after"):
-                    svc.get_embedding("test")
-
-    def test_raises_value_error_on_terminal_4xx(self):
-        bad_request = _mock_error(400, body="Bad input")
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=bad_request):
-            with pytest.raises(ValueError, match="HTTP 400"):
-                svc.get_embedding("test")
-
-    def test_raises_timeout_error_after_repeated_timeouts(self):
-        with patch("app.services.embedding_service.requests.post",
-                   side_effect=__import__("requests").exceptions.Timeout):
-            with patch("app.services.embedding_service.time.sleep"):
-                with pytest.raises(TimeoutError):
-                    svc.get_embedding("test")
+    def test_model_encode_called_with_normalize(self):
+        mock = _mock_model()
+        with patch("app.services.embedding_service.get_model", return_value=mock):
+            svc.get_embedding("hello")
+        mock.encode.assert_called_once_with("hello", normalize_embeddings=True)
 
 
 # ── Batch embedding tests ──────────────────────────────────────────────────────
 
 class TestGetEmbeddingsBatch:
     def test_returns_one_vector_per_input(self):
-        batch_vectors = [VECTOR_384, VECTOR_384, VECTOR_384]
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=_mock_ok(batch_vectors)):
+        with patch("app.services.embedding_service.get_model", return_value=_mock_model()):
             result = svc.get_embeddings_batch(["a", "b", "c"])
         assert len(result) == 3
         assert all(len(v) == 384 for v in result)
 
-    def test_truncates_oversized_chunks_in_batch(self):
-        long_texts = ["x" * 3000, "y" * 2500]
-        with patch("app.services.embedding_service.requests.post",
-                   return_value=_mock_ok([VECTOR_384, VECTOR_384])) as mock_post:
-            svc.get_embeddings_batch(long_texts)
-        sent_inputs = mock_post.call_args.kwargs["json"]["inputs"]
-        assert all(len(t) <= svc._MAX_CHARS_PER_CHUNK for t in sent_inputs)
+    def test_empty_list_returns_empty(self):
+        result = svc.get_embeddings_batch([])
+        assert result == []
 
-    def test_falls_back_to_serial_on_413(self):
-        too_large = _mock_error(413)
-        serial_ok = _mock_ok([VECTOR_384])
-        # First call is batch (413), subsequent calls are serial (one per text)
-        with patch("app.services.embedding_service.requests.post",
-                   side_effect=[too_large, serial_ok, serial_ok]):
-            result = svc.get_embeddings_batch(["text1", "text2"])
-        assert len(result) == 2
+    def test_each_vector_is_list_of_floats(self):
+        with patch("app.services.embedding_service.get_model", return_value=_mock_model()):
+            result = svc.get_embeddings_batch(["x", "y"])
+        assert all(isinstance(v, list) for v in result)
+        assert all(isinstance(f, float) for v in result for f in v)
 
-    def test_falls_back_to_serial_after_timeout_exhaustion(self):
-        import requests as req_lib
-        serial_ok = _mock_ok([VECTOR_384])
-        side_effects = [req_lib.exceptions.Timeout] * svc.config.MAX_EMBED_RETRIES + [serial_ok, serial_ok]
-        with patch("app.services.embedding_service.requests.post",
-                   side_effect=side_effects):
-            with patch("app.services.embedding_service.time.sleep"):
-                result = svc.get_embeddings_batch(["text1", "text2"])
-        assert len(result) == 2
+    def test_model_encode_called_with_batch_size_and_normalize(self):
+        mock = _mock_model()
+        texts = ["alpha", "beta", "gamma"]
+        with patch("app.services.embedding_service.get_model", return_value=mock):
+            svc.get_embeddings_batch(texts)
+        mock.encode.assert_called_once_with(texts, batch_size=32, normalize_embeddings=True)
+
+
+# ── Singleton model loading ────────────────────────────────────────────────────
+
+class TestGetModel:
+    def test_model_loaded_only_once(self):
+        """get_model() must return the same instance on repeated calls."""
+        svc._model = None  # reset singleton for this test
+        with patch(
+            "app.services.embedding_service.SentenceTransformer",
+            return_value=_mock_model(),
+        ) as mock_cls:
+            svc.get_model()
+            svc.get_model()
+        mock_cls.assert_called_once()
+        svc._model = None  # clean up after test
