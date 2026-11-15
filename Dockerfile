@@ -6,6 +6,7 @@ WORKDIR /build
 # Install Python dependencies into a staging location
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: Lean Runtime Image ───────────────────────────────────────────────
@@ -29,5 +30,5 @@ EXPOSE 8000
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 # PORT is provided automatically by Render, Railway, and Fly.io.
-# --workers 2 is suitable for a 512 MB RAM instance; scale up for larger plans.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
+# --workers 1 keeps memory safely below 512 MB on free tier instances.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
