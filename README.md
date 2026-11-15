@@ -123,10 +123,10 @@ rag-main/
 │   │   └── ingest.py       # PDF document parser and indexer endpoint
 │   ├── services/           # Underlying business logic pipelines
 │   │   ├── create_index.py # Script/service to initialize Qdrant database collection
-│   │   ├── embedding_service.py # Hugging Face embed retry & batch logic
+│   │   ├── embedding_service.py # Local in-memory embedding model (sentence-transformers)
 │   │   ├── fusion_service.py    # Reciprocal Rank Fusion implementation
 │   │   ├── ingest_service.py    # Ingestion orchestration logic
-│   │   ├── llm_service.py       # Hugging Face completions client
+│   │   ├── llm_service.py       # Groq Cloud OpenAI-compatible completions client
 │   │   ├── qdrant_service.py    # Qdrant client connection and search hooks
 │   │   └── search_service.py    # Combines vector and lexical search runs
 │   └── utils/              # Helper utility modules
