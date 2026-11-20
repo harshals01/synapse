@@ -253,7 +253,7 @@ pytest tests/ -v
 
 ## 📐 Design Decisions & Trade-offs
 *   **FastAPI & Uvicorn Async Bounds:** Heavy CPU-bound embedding calls and database requests are wrapped using Python's `loop.run_in_executor` block to keep FastAPI's async thread loop non-blocking and ultra-responsive.
-*   **Unified DB Search with Qdrant:** Rather than combining a distinct semantic search engine (e.g. Pinecone) with an external text index engine (e.g. Elasticsearch), Qdrant provides both dense index k-NN search and sparse keyword scroll indexing under a single engine.
+*   **Unified DB Search with Qdrant:** Rather than maintaining separate databases for dense vector search and sparse keyword search, Qdrant handles both dense index k-NN search and full-text keyword scroll indexing natively under a single unified engine.
 *   **In-Memory Local Vector Embeddings:** Eliminates external embedding API costs, rate limits, and network latency by running `sentence-transformers/all-MiniLM-L6-v2` directly in-process with a preloaded singleton model.
 *   **Groq Cloud LPU Acceleration:** Replaces slow serverless routing with Groq's specialized LPU hardware, delivering sub-second completions with large context handling via OpenAI-compatible endpoints.
 *   **Heuristic Context-Aware Pronoun Rewriter:** Improves multi-turn RAG conversation accuracy by resolving ambiguous query pronouns locally, bypassing costly pre-query LLM rewriting pipelines.
